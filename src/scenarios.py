@@ -29,12 +29,12 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
     thetas = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     
 
-    # Initial default settings 
+    # --- Constants for Configuration ---
     BASE_RF_PARAMS = {
-        'n_estimators': 100,
-        'max_features': 'sqrt', # Standard RF default
-        'min_samples_leaf': 1,
-        'min_samples_split': 2,
+        'n_estimators': 200, 
+        'min_samples_leaf': 1, 
+        'max_features': 0.9,
+        'min_samples_split': 10,
         'max_depth': None, 
         'n_jobs': -1,
         'random_state': 42 
