@@ -3,3 +3,9 @@ pandas
 scikit-learn
 doubleml
 econml
+joblib
+tqdm
+jupyter
+notebook
+matplotlib
+seaborn
