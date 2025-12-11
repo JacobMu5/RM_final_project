@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Type, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List, Type
 from src.dgps.tree_friendly import TreeFriendlyDGP
 from src.estimators.dml import DoubleMLEstimator
 from src.estimators.econml import EconMLEstimator
@@ -18,18 +18,11 @@ class ScenarioConfig:
 def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
     """
     Generates a list of ScenarioConfig objects for the simulation.
-    
-    Args:
-        n_sim: Number of simulations per scenario.
-    
-    Returns:
-        List[ScenarioConfig]: A list of configured scenarios.
     """
     scenarios = []
     thetas = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     
-
-    # --- Constants for Configuration ---
+    # Constants
     BASE_RF_PARAMS = {
         'n_estimators': 200, 
         'min_samples_leaf': 1, 
@@ -44,17 +37,13 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
     SAMPLE_SIZE = 2000
     
     for theta in thetas:
-        # Common DGP params for this theta
+        # Configuration for Naive (No Collider) vs Bad Control (Includes Collider)
         dgp_params_naive = {**BASE_DGP_PARAMS, 'include_collider': False, 'theta': theta}
         dgp_params_bad   = {**BASE_DGP_PARAMS, 'include_collider': True,  'theta': theta}
 
-        # --- Tree Friendly Scenarios (Correct Specification) ---
+        # --- DML Scenarios ---
         
-        # 1. Naive DML (No OVB)
-        # "Naive" means we do NOT include the "bad control" (Collider) in our dataset.
-        # This is the CORRECT approach when OVB is absent (alpha_u=gamma_u=0).
-        # We run this for all thetas to show that even if a collider exists generating data,
-        # IGNORING it (Naive) should yield the correct zero bias.
+        # Naive DML (Correct Specification: Collider ignored)
         scenarios.append(ScenarioConfig(
             name=f"TreeFriendly_Naive_DML_theta_{theta}",
             dgp_class=TreeFriendlyDGP,
@@ -66,10 +55,7 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
             first_seed=42 
         ))
 
-        # 2. Bad Control DML
-        # "Bad Control" means we INCLUDE the collider in our dataset W.
-        # DML will control for it, which inadvertently opens a backdoor path, causing bias.
-        # As theta increases, this bias should get worse.
+        # Bad Control DML (Misspecified: Collider included in W)
         scenarios.append(ScenarioConfig(
             name=f"TreeFriendly_BadControl_DML_theta_{theta}",
             dgp_class=TreeFriendlyDGP,
@@ -81,7 +67,9 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
             first_seed=42
         ))
 
-        # 3. Bad Control EconML (No OVB)
+        # --- EconML Scenarios ---
+
+        # Bad Control EconML (Misspecified)
         scenarios.append(ScenarioConfig(
             name=f"TreeFriendly_BadControl_EconML_theta_{theta}",
             dgp_class=TreeFriendlyDGP,
@@ -93,7 +81,7 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
             first_seed=42
         ))
 
-        # 4. Naive EconML (No OVB)
+        # Naive EconML (Correct Specification)
         scenarios.append(ScenarioConfig(
             name=f"TreeFriendly_Naive_EconML_theta_{theta}",
             dgp_class=TreeFriendlyDGP,
@@ -106,3 +94,26 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
         ))
             
     return scenarios
+
+def get_microscope_scenario(theta: float = 1.0, seed: int = 42) -> ScenarioConfig:
+    """
+    Returns a specific configuration for the 'Microscope View' diagnostic.
+    """
+    rf_params = {
+        'n_estimators': 200, 
+        'min_samples_leaf': 1, 
+        'max_features': 0.9, 
+        'n_jobs': -1, 
+        'random_state': seed
+    }
+    
+    return ScenarioConfig(
+        name="Microscope_Diagnostic",
+        dgp_class=TreeFriendlyDGP,
+        dgp_params={'n_features': 4, 'include_collider': True, 'theta': theta},
+        estimator_class=EconMLEstimator,
+        estimator_params={'n_estimators': 200, 'random_state': seed, 'rf_params': rf_params},
+        sample_size=2000,
+        n_simulations=1,
+        first_seed=seed
+    )

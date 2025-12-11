@@ -50,3 +50,36 @@ def run_single_simulation(config, seed, sim_id):
         'ci_upper': ci_upper,
         'spurious_corr': spurious_corr
     }
+
+
+def run_raw_simulation(config, seed):
+    """
+    Runs a simulation and returns the raw DGP and Estimator objects.
+    Used for diagnostics (Microscope View) where we need internal model states.
+    """
+    # 1. Initialize DGP
+    # We explicitly pass noise/confounding to ensure consistency across diagnostics
+    # Note: If these are in dgp_params, this might collide, but typically they aren't for this setup.
+    # To be safe, we merge them.
+    dgp_kwargs = config.dgp_params.copy()
+    dgp_kwargs.update({
+        'confounding_strength': 0.2, 
+        'noise_std': 1.0
+    })
+    
+    dgp = config.dgp_class(**dgp_kwargs)
+    
+    # 2. Sample Data
+    D, Y, W = dgp.sample(n_obs=config.sample_size, seed=seed)
+    
+    # 3. Initialize & Fit Estimator
+    # We pass random_state explicitely to ensure the estimator (RF) is seeded correctly per run
+    est_kwargs = config.estimator_params.copy()
+    est_kwargs['random_state'] = seed
+    
+    # Note: Some estimators might have 'rf_params' nested, which also has random_state.
+    # The Estimator class should handle this, or we trust 'seed' here does the job for the wrapper.
+    estimator = config.estimator_class(**est_kwargs)
+    estimator.fit(D, Y, W)
+    
+    return dgp, estimator
