@@ -5,6 +5,7 @@ from src.dgps.tree_friendly import TreeFriendlyDGP
 from src.dgps.plr_ccddhnr2018 import PLRCCDDHNR2018DGP
 from src.estimators.dml import DoubleMLEstimator
 from src.estimators.econml import EconMLEstimator
+from src.estimators.ols import OLSEstimator
 
 
 @dataclass
@@ -29,6 +30,13 @@ class ReproducibleDoubleMLEstimator(DoubleMLEstimator):
 
 class ReproducibleEconMLEstimator(EconMLEstimator):
     """Wrapper to ensure global randon seed is set before EconML execution."""
+    def fit(self, D, Y, W):
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
+        super().fit(D, Y, W)
+
+class ReproducibleOLSEstimator(OLSEstimator):
+    """Wrapper to ensure global random seed is set before OLS execution (mostly for symmetry)."""
     def fit(self, D, Y, W):
         if self.random_state is not None:
             np.random.seed(self.random_state)
@@ -86,6 +94,7 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
                 dgp_p = {**base_params, **variant_params, 'theta': theta}
                 add_scenario(prefix, variant_name, dgp_cls, dgp_p, ReproducibleDoubleMLEstimator, {**dml_params, 'rf_params': RF_PARAMS[prefix]})
                 add_scenario(prefix, variant_name, dgp_cls, dgp_p, ReproducibleEconMLEstimator, {**econml_params, 'rf_params': RF_PARAMS[prefix]})
+                add_scenario(prefix, variant_name, dgp_cls, dgp_p, ReproducibleOLSEstimator,{"add_intercept": True, "robust_se": "HC3"})
 
     return scenarios
 

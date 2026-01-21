@@ -29,14 +29,18 @@ def calculate_metrics(df: pd.DataFrame) -> pd.DataFrame:
         def parse_scenario(name):
             try:
                 parts = name.split('_theta_')
-                full_method_name = parts[0]
+                left = parts[0]
                 theta = float(parts[1])
-                method = full_method_name.replace('TreeFriendly_', '')
-                return pd.Series([method, theta], index=['Method', 'Theta'])
-            except:
-                return pd.Series(['Unknown', np.nan], index=['Method', 'Theta'])
 
-        df[['Method', 'Theta']] = df['scenario'].apply(parse_scenario)
+                # left = "{DGP}_{Variant}_{Estimator}"  (e.g., "TreeFriendly_BadControl_OLS")
+                dgp = left.split('_', 1)[0]
+                method = left.split('_', 1)[1] if '_' in left else left
+
+                return pd.Series([dgp, method, theta], index=['DGP', 'Method', 'Theta'])
+            except:
+                return pd.Series(['Unknown', 'Unknown', np.nan], index=['DGP', 'Method', 'Theta'])
+
+        df[['DGP', 'Method', 'Theta']] = df['scenario'].apply(parse_scenario)
 
     # Centered Coverage: Fraction of CIs covering the *mean* estimate of the method.
     # Evaluates the validity of the inference relative to the estimator's own target (ignoring bias).

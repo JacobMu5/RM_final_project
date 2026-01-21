@@ -14,7 +14,7 @@ def plot_standard_metrics(df: pd.DataFrame, summary: pd.DataFrame, output_dir: P
     plt.figure(figsize=(10, 6))
     sns.lineplot(data=df, x='Theta', y='bias', hue='Method', style='Method', markers=True, err_style='bars', err_kws={'capsize': 5})
     plt.axhline(0, color='black', linestyle=':', label='Zero Bias')
-    plt.title('Bias vs Collider Strength (TreeFriendly DGP)')
+    plt.title('Bias vs Collider Strength')
     plt.ylabel('Bias')
     plt.xlabel('Theta (Collider Strength)')
     plt.legend()
@@ -25,7 +25,7 @@ def plot_standard_metrics(df: pd.DataFrame, summary: pd.DataFrame, output_dir: P
     # Spurious Correlation vs Collider Strength
     plt.figure(figsize=(10, 6))
     sns.lineplot(data=df, x='Theta', y='spurious_corr', hue='Method', style='Method', markers=True)
-    plt.title('Spurious Heterogeneity vs Collider Strength (TreeFriendly DGP)')
+    plt.title('Spurious Heterogeneity vs Collider Strength')
     plt.ylabel('Correlation(CATE, Hidden Collider)')
     plt.xlabel('Theta (Collider Strength)')
     plt.grid(True)
@@ -37,7 +37,7 @@ def plot_standard_metrics(df: pd.DataFrame, summary: pd.DataFrame, output_dir: P
     sns.lineplot(data=summary, x='Theta', y='Coverage', hue='Method', style='Method', markers=True)
     plt.axhline(0.95, color='red', linestyle='--', label='Target (0.95)')
     plt.axhline(0.90, color='gray', linestyle=':', label='Threshold (0.90)')
-    plt.title('True Coverage Rate (TreeFriendly DGP)')
+    plt.title('True Coverage Rate')
     plt.ylabel('Coverage Rate')
     plt.xlabel('Theta (Collider Strength)')
     plt.grid(True)
@@ -87,6 +87,24 @@ def plot_bias_distribution(df: pd.DataFrame, output_dir: Path):
         plt.savefig(output_dir / "bias_distribution_econml.png")
         plt.close()
 
+    # OLS Bias Distribution
+    print("Generating Plot: Distribution of OLS Estimates (KDE)...")
+    plt.figure(figsize=(10, 6))
+
+    subset_ols = df[df['Theta'].isin([0.0, 1.0]) & df['Method'].str.contains('BadControl_OLS')].copy()
+    
+    if not subset_ols.empty:
+        subset_ols['Condition'] = subset_ols['Theta'].apply(lambda x: "Theta=0.0 (No Bias)" if x == 0.0 else "Theta=1.0 (High Bias)")
+
+        ax = sns.kdeplot(data=subset_ols, x='tau_hat', hue='Condition', fill=True, common_norm=False, palette='viridis')
+        plt.axvline(1.0, color='black', linestyle='--', label='True Effect (1.0)')
+        plt.title('Distribution of OLS Estimates (Bad Control)', fontsize=14)
+        plt.xlabel('Estimated Treatment Effect (Tau Hat)')
+        sns.move_legend(ax, "upper right")
+        plt.tight_layout()
+        plt.savefig(output_dir / "bias_distribution_ols.png")
+        plt.close()
+
 def plot_bias_variance(df: pd.DataFrame, output_dir: Path):
     """
     Generates a stacked area plot showing Bias^2 vs Variance decomposition across Thetas.
@@ -94,7 +112,7 @@ def plot_bias_variance(df: pd.DataFrame, output_dir: Path):
     output_dir = Path(output_dir)
     print("Generating Plot: Bias-Variance Decomposition (Stacked)...")
     
-    target_methods = ['BadControl_DML', 'BadControl_EconML']
+    target_methods = ['BadControl_DML', 'BadControl_EconML', 'BadControl_OLS']
     
     for target_method in target_methods:
         if target_method not in df['Method'].values:
