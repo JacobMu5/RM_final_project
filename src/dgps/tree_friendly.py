@@ -14,6 +14,7 @@ class TreeFriendlyDGP:
         gamma_u=0.0, 
         theta=0.0,
         include_collider=False,
+        include_linear_collider=False,
         noise_std=1.0, 
         confounding_strength=0.2,
     ):
@@ -27,6 +28,7 @@ class TreeFriendlyDGP:
             gamma_u (float): Strength of effect of Hidden Confounder on Outcome.
             theta (float): Collider strength (effect of D*Y on C).
             include_collider (bool): If True, returns Collider C as a feature in W.
+            include_linear_collider (bool): Whether to include the linear collider.
             noise_std (float): Standard deviation of Gaussian noise.
             confounding_strength (float): Coefficient for the nuisance function g(X).
         """
@@ -36,10 +38,12 @@ class TreeFriendlyDGP:
         self.gamma_u = gamma_u
         self.theta = theta
         self.include_collider = include_collider
+        self.include_linear_collider = include_linear_collider
         self.noise_std = noise_std
         self.confounding_strength = confounding_strength
         
         self._C = None
+        self._C_linear = None
 
 
     @property
@@ -51,6 +55,13 @@ class TreeFriendlyDGP:
         if self._C is None:
             raise ValueError("Data has not been sampled yet.")
         return self._C
+    
+    @property
+    def C_linear(self):
+        """Returns the linear collider variable."""
+        if self._C_linear is None:
+            raise ValueError("Linear collider has not been sampled yet.")
+        return self._C_linear
     
     def sample(self, n_obs, seed=None):
         """
@@ -68,37 +79,26 @@ class TreeFriendlyDGP:
         """
         rng = np.random.default_rng(seed)
         
-        # 1. Generate Confounder U (Unobserved) - here not used since alpha, gamma = 0
         U = rng.normal(0, 1, n_obs)
         
-        # 2. Generate Covariates X
-        # We need at least 4 features for the paper's specification
         if self.n_features < 4:
             raise ValueError("TreeFriendlyDGP requires at least 4 features.")
             
         X = rng.normal(0, 1, (n_obs, self.n_features))
         
-        # Construct nuisance function g(X) using the first 4 features
-        # We use the "Reduced Cubic-Sin" specification confirmed to have good coverage.
-        
-        # g(X) = confounding_strength * (0.1 * X1^3 + 0.5 * sin(X2))
         g_X = self.confounding_strength * (0.1 * (X[:, 0]**3) + 0.5 * np.sin(X[:, 1]))
         
-        # 3. Generate Treatment D
-        # D = g(X) + alpha*U + noise
         D = g_X + self.alpha_u * U + rng.normal(0, self.noise_std, n_obs)
         
-        # 4. Generate Outcome Y
-        # Y = tau*D + g(X) + gamma*U + noise
         Y = self._tau * D + g_X + self.gamma_u * U + rng.normal(0, self.noise_std, n_obs)
         
-        # 5. Generate Collider C
-        # C = theta * (D * Y) + noise
         self._C = self.theta * (D * Y) + rng.normal(0, self.noise_std, n_obs)
+        self._C_linear = self.theta * (0.5 * D + 0.3 * Y + 0.1 * X[:, 0]) + rng.normal(0, self.noise_std, n_obs)
         
+        W = X
         if self.include_collider:
-            W = np.column_stack([X, self._C])
-        else:
-            W = X
+            W = np.column_stack([W, self._C])
+        if self.include_linear_collider:
+            W = np.column_stack([W, self._C_linear])
             
         return D, Y, W

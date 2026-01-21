@@ -3,10 +3,10 @@
 This repository contains the simulation code for our final project investigating spurious heterogeneity.
 
 ### Research Question
-*"How does the functional form of a collider (Linear, Multiplicative, or Threshold) dictate the morphology of spurious heterogeneity, and to what extent does this compromise **estimation accuracy (Bias, MSE)** and **inference validity (Coverage Probability)** in non-parametric Causal Forests versus semi-parametric Double Machine Learning?"*
+*"How does the functional form of a collider (Linear, Multiplicative, or Threshold) dictate the structure of spurious heterogeneity, and to what extent does this compromise **estimation accuracy (Bias, MSE)** and **inference validity (Coverage Probability)** in non-parametric Causal Forests versus semi-parametric Double Machine Learning?"*
 
 > **Project Scope & Metrics:**
-> * **Bias Morphology:** We analyze the distinct "shapes" of bias introduced by different collider functions.
+> * **Bias Structure:** We analyze the distinct "shapes" of bias introduced by different collider functions.
 > * **Inference Failure:** We specifically test for **Coverage Collapse**—instances where standard confidence intervals fail to cover the true effect.
 > * **Method Comparison:** We contrast the robustness of **Causal Forests** (which may "learn" the noise) against **DML Partial Linear Regression** (which assumes linearity).
 > * **Note:** Ordinary Least Squares (OLS) will serve as a baseline in future iterations.
