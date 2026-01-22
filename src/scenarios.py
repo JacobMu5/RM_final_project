@@ -66,9 +66,9 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
     }
 
     DGP_CONFIGS = [
-        ('TreeFriendly', TreeFriendlyDGP, {'n_features': 4, 'alpha_u': 0.0, 'gamma_u': 0.0}, 
+        ('TreeFriendly', TreeFriendlyDGP, {'n_features': 12, 'alpha_u': 0.0, 'gamma_u': 0.0}, 
          {'n_folds': 5, 'n_trees': 400, 'n_rep': 1}, {'n_estimators': 400}),
-        ('PLR', PLRCCDDHNR2018DGP, {'n_features': 20, 'tau': 1.0},
+        ('PLR', PLRCCDDHNR2018DGP, {'n_features': 12, 'tau': 1.0},
          {'n_folds': 5, 'n_trees': 500, 'n_rep': 1}, {'n_estimators': 300})
     ]
 
