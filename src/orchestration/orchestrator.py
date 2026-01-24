@@ -18,8 +18,6 @@ def run_all_scenarios(scenarios: List['ScenarioConfig']) -> pd.DataFrame:
     all_results = []
     
     for config in tqdm(scenarios, desc="Overall Progress"):
-        # run_single_simulation handles the logic for one run
-        # n_jobs=-1 uses all available cores for this batch
         results = Parallel(n_jobs=-1)(
             delayed(run_single_simulation)(
                 config=config,
@@ -41,14 +39,10 @@ def run_microscope_diagnostic(theta: float = 1.0, n_obs: int = 2000, seed: int =
     """
     print(f"Running Microscope Diagnostic (Theta={theta})...")
     
-    # 1. Get Config from Scenarios
-    # Note: We override n_obs/seed if passed, but the default helper matches defaults
     config = get_microscope_scenario(theta=theta, seed=seed)
     
-    # Ensure sample size matches request (helper defaults to 2000)
     config.sample_size = n_obs
 
-    # 2. Run Raw Simulation using Runner
     dgp, est = run_raw_simulation(config, seed=seed)
     
     return dgp, est
