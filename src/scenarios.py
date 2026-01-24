@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Type
 import numpy as np
 from src.dgps.tree_friendly import TreeFriendlyDGP
+from src.dgps.wgan import WGANDGP
 from src.dgps.plr_ccddhnr2018 import PLRCCDDHNR2018DGP
 from src.estimators.dml import DoubleMLEstimator
 from src.estimators.econml import EconMLEstimator
@@ -62,13 +63,15 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
 
     RF_PARAMS = {
         'TreeFriendly': {'n_jobs': -1, 'n_estimators': 500, 'max_features': 0.3, 'min_samples_leaf': 6, 'min_samples_split': 5, 'max_depth': 5},
+        'WGAN': {'n_jobs': -1, 'n_estimators': 400, 'max_features': 'sqrt', 'min_samples_leaf': 17, 'min_samples_split': 14, 'max_depth': 50},
         'PLR': {'n_jobs': -1, 'n_estimators': 400, 'max_features': 0.8, 'min_samples_leaf': 15, 'min_samples_split': 7, 'max_depth': None}
     }
 
     DGP_CONFIGS = [
-        ('TreeFriendly', TreeFriendlyDGP, {'n_features': 12, 'alpha_u': 0.0, 'gamma_u': 0.0}, 
+        ('TreeFriendly', TreeFriendlyDGP, {'n_features': 11, 'alpha_u': 0.0, 'gamma_u': 0.0}, 
          {'n_folds': 5, 'n_trees': 400, 'n_rep': 1}, {'n_estimators': 400}),
-        ('PLR', PLRCCDDHNR2018DGP, {'n_features': 12, 'tau': 1.0},
+        ('WGAN', WGANDGP, {}, {'n_folds': 5, 'n_trees': 400, 'n_rep': 1}, {'n_estimators': 400}),
+        ('PLR', PLRCCDDHNR2018DGP, {'n_features': 11, 'tau': 1.0},
          {'n_folds': 5, 'n_trees': 500, 'n_rep': 1}, {'n_estimators': 300})
     ]
 
