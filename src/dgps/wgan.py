@@ -41,7 +41,20 @@ class WGANDGP:
         self.path_ate = self.base_path / "wgan_ate.txt"
         self.device = torch.device('cpu')
         
-        data = fetch_401K(return_type='DataFrame')
+        data_path = Path("data/401k.pkl")
+        if data_path.exists():
+            try:
+                data = pd.read_pickle(data_path)
+            except Exception:
+                data = fetch_401K(return_type='DataFrame')
+        else:
+            data = fetch_401K(return_type='DataFrame')
+            try:
+                data_path.parent.mkdir(exist_ok=True)
+                data.to_pickle(data_path)
+            except Exception:
+                pass
+            
         self.df = data
         self.feature_names = [c for c in data.columns if c not in ['net_tfa', 'e401', 'p401']]
         self.X_cols = self.feature_names
