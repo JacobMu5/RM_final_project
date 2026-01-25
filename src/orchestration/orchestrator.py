@@ -36,7 +36,7 @@ def run_all_scenarios(scenarios: List['ScenarioConfig']) -> pd.DataFrame:
         if not sims_to_run:
             continue
 
-        results = Parallel(n_jobs=7)(
+        results = Parallel(n_jobs=-1)(
             delayed(run_single_simulation)(
                 config=config,
                 seed=config.first_seed + i,
