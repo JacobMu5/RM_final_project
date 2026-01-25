@@ -1,5 +1,5 @@
-"""WGAN-GP Data Generating Process using official ds-wgan package."""
-
+import contextlib
+import io
 import numpy as np
 import pandas as pd
 import torch
@@ -38,6 +38,7 @@ class WGANDGP:
         self.base_path.mkdir(parents=True, exist_ok=True)
         self.path_gx = self.base_path / "wgan_gx.pth"
         self.path_gy = self.base_path / "wgan_gy.pth"
+        self.path_ate = self.base_path / "wgan_ate.txt"
         self.device = torch.device('cpu')
         
         data = fetch_401K(return_type='DataFrame')
@@ -56,7 +57,7 @@ class WGANDGP:
         self._prepare_data_wrappers()
         self._load_or_train()
         
-        self.tau = self._calculate_oracle_ate(n_obs=1_000_000)
+        self.tau = self._get_oracle_ate()
 
     @property
     def C(self):
@@ -78,29 +79,34 @@ class WGANDGP:
             gx_df, continuous_vars=self.continuous_vars, categorical_vars=self.binary_vars,
             context_vars=self.D_cols, continuous_lower_bounds=x_lower_bounds
         )
-        self.spec_gx = wgan.Specifications(
-            self.dw_gx, optimizer=AdamGAN, batch_size=128, max_epochs=self.wgan_epochs,
-            critic_d_hidden=[128, 128, 128], generator_d_hidden=[128, 128, 128],
-            test_set_size=32, critic_dropout=0, generator_dropout=0,
-            critic_gp_factor=10, critic_steps=15, critic_lr=1e-4, generator_lr=1e-4,
-            device=self.device, print_every=self.print_every
-        )
+        
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.spec_gx = wgan.Specifications(
+                self.dw_gx, optimizer=AdamGAN, batch_size=128, max_epochs=self.wgan_epochs,
+                critic_d_hidden=[128, 128, 128], generator_d_hidden=[128, 128, 128],
+                test_set_size=32, critic_dropout=0, generator_dropout=0,
+                critic_gp_factor=10, critic_steps=15, critic_lr=1e-4, generator_lr=1e-4,
+                device=self.device, print_every=self.print_every
+            )
         self.gen_gx = wgan.Generator(self.spec_gx)
         self.crit_gx = wgan.Critic(self.spec_gx)
 
+        # Prepare G_Y (Outcome Generator)
         gy_df = self.df[self.Y_cols + self.X_cols + self.D_cols].copy()
         self.dw_gy = wgan.DataWrapper(
             gy_df, continuous_vars=self.Y_cols, categorical_vars=[],
             context_vars=self.X_cols + self.D_cols,
             continuous_lower_bounds={'net_tfa': self.df['net_tfa'].min()}
         )
-        self.spec_gy = wgan.Specifications(
-            self.dw_gy, optimizer=AdamGAN, batch_size=128, max_epochs=self.wgan_epochs,
-            critic_d_hidden=[128, 128, 128], generator_d_hidden=[128, 128, 128],
-            test_set_size=32, critic_dropout=0, generator_dropout=0,
-            critic_gp_factor=10, critic_steps=15, critic_lr=1e-4, generator_lr=1e-4,
-            device=self.device, print_every=self.print_every
-        )
+        
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.spec_gy = wgan.Specifications(
+                self.dw_gy, optimizer=AdamGAN, batch_size=128, max_epochs=self.wgan_epochs,
+                critic_d_hidden=[128, 128, 128], generator_d_hidden=[128, 128, 128],
+                test_set_size=32, critic_dropout=0, generator_dropout=0,
+                critic_gp_factor=10, critic_steps=15, critic_lr=1e-4, generator_lr=1e-4,
+                device=self.device, print_every=self.print_every
+            )
         self.gen_gy = wgan.Generator(self.spec_gy)
         self.crit_gy = wgan.Critic(self.spec_gy)
 
@@ -231,34 +237,67 @@ class WGANDGP:
         
         return D_real.flatten(), Y_syn, W_syn
 
-    def _calculate_oracle_ate(self, n_obs=1_000_000):
-        """Calculates the True ATE using 1M Monte Carlo samples."""
-        indices = np.random.choice(len(self.df), n_obs, replace=True)
-        D_context = self.df[self.D_cols].iloc[indices].copy().reset_index(drop=True)
+    def _get_oracle_ate(self):
+        """Retrieves cached ATE or calculates it if missing."""
+        if self.path_ate.exists():
+            with open(self.path_ate, "r") as f:
+                ate = float(f.read().strip())
+                # print(f"Using cached Oracle ATE: {ate:.4f}")
+                return ate
         
-        temp_df_x = pd.DataFrame(0.0, index=np.arange(n_obs), columns=self.df.columns)
-        temp_df_x[self.D_cols] = D_context
+        tau = self._calculate_oracle_ate(n_obs=1_000_000)
+        with open(self.path_ate, "w") as f:
+            f.write(str(tau))
+        return tau
+
+
+    def _calculate_oracle_ate(self, n_obs=1_000_000, batch_size=50_000):
+        """Calculates the True ATE using 1M Monte Carlo samples in batches (due to RAM issues)."""
+        print(f"Calculating Oracle ATE with {n_obs} samples (batch_size={batch_size})...")
         
-        _, ctx_gx = self.dw_gx.preprocess(temp_df_x)
+        total_diff_sum = 0.0
+        n_processed = 0
         
-        with torch.no_grad():
-            x_fake_df = self.dw_gx.deprocess(self.gen_gx(ctx_gx), ctx_gx)
+        n_batches = int(np.ceil(n_obs / batch_size))
         
-        X_generated = x_fake_df[self.X_cols]
-        
-        df_d1 = pd.concat([X_generated, pd.DataFrame(1, index=np.arange(n_obs), columns=self.D_cols)], axis=1)
-        for c in self.Y_cols: df_d1[c] = 0.0
-        _, ctx_gy_d1 = self.dw_gy.preprocess(df_d1)
-        
-        df_d0 = pd.concat([X_generated, pd.DataFrame(0, index=np.arange(n_obs), columns=self.D_cols)], axis=1)
-        for c in self.Y_cols: df_d0[c] = 0.0
-        _, ctx_gy_d0 = self.dw_gy.preprocess(df_d0)
-        
-        with torch.no_grad():
-            y1_fake_df = self.dw_gy.deprocess(self.gen_gy(ctx_gy_d1), ctx_gy_d1)
-            y0_fake_df = self.dw_gy.deprocess(self.gen_gy(ctx_gy_d0), ctx_gy_d0)
+        for i in range(n_batches):
+            current_n = min(batch_size, n_obs - n_processed)
+            if current_n <= 0: break
             
-        y1 = y1_fake_df['net_tfa'].values
-        y0 = y0_fake_df['net_tfa'].values
+            indices = np.random.choice(len(self.df), current_n, replace=True)
+            D_context = self.df[self.D_cols].iloc[indices].copy().reset_index(drop=True)
+            
+            temp_df_x = pd.DataFrame(0.0, index=np.arange(current_n), columns=self.df.columns)
+            temp_df_x[self.D_cols] = D_context
+            
+            _, ctx_gx = self.dw_gx.preprocess(temp_df_x)
+            
+            with torch.no_grad():
+                x_fake_df = self.dw_gx.deprocess(self.gen_gx(ctx_gx), ctx_gx)
+            
+            X_generated = x_fake_df[self.X_cols]
+            
+            df_d1 = pd.concat([X_generated, pd.DataFrame(1, index=np.arange(current_n), columns=self.D_cols)], axis=1)
+            for c in self.Y_cols: df_d1[c] = 0.0
+            _, ctx_gy_d1 = self.dw_gy.preprocess(df_d1)
+            
+            df_d0 = pd.concat([X_generated, pd.DataFrame(0, index=np.arange(current_n), columns=self.D_cols)], axis=1)
+            for c in self.Y_cols: df_d0[c] = 0.0
+            _, ctx_gy_d0 = self.dw_gy.preprocess(df_d0)
+            
+            with torch.no_grad():
+                y1_fake_df = self.dw_gy.deprocess(self.gen_gy(ctx_gy_d1), ctx_gy_d1)
+                y0_fake_df = self.dw_gy.deprocess(self.gen_gy(ctx_gy_d0), ctx_gy_d0)
+            
+            y1 = y1_fake_df['net_tfa'].values
+            y0 = y0_fake_df['net_tfa'].values
+            
+            total_diff_sum += np.sum(y1 - y0)
+            n_processed += current_n
+            
+            if (i + 1) % 5 == 0:
+                print(f"Processed {n_processed}/{n_obs} samples...")
         
-        return np.mean(y1 - y0)
+        ate = total_diff_sum / n_processed
+        print(f"Oracle ATE calculation complete: {ate:.4f}")
+        return ate

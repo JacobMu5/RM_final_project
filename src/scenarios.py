@@ -62,9 +62,9 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
     scenarios = []
 
     RF_PARAMS = {
-        'TreeFriendly': {'n_jobs': -1, 'n_estimators': 500, 'max_features': 0.3, 'min_samples_leaf': 6, 'min_samples_split': 5, 'max_depth': 5},
-        'WGAN': {'n_jobs': -1, 'n_estimators': 400, 'max_features': 'sqrt', 'min_samples_leaf': 17, 'min_samples_split': 14, 'max_depth': 50},
-        'PLR': {'n_jobs': -1, 'n_estimators': 400, 'max_features': 0.8, 'min_samples_leaf': 15, 'min_samples_split': 7, 'max_depth': None}
+        'TreeFriendly': {'n_jobs': 1, 'n_estimators': 500, 'max_features': 0.3, 'min_samples_leaf': 6, 'min_samples_split': 5, 'max_depth': 5},
+        'WGAN': {'n_jobs': 1, 'n_estimators': 400, 'max_features': 'sqrt', 'min_samples_leaf': 17, 'min_samples_split': 14, 'max_depth': 50},
+        'PLR': {'n_jobs': 1, 'n_estimators': 400, 'max_features': 0.8, 'min_samples_leaf': 15, 'min_samples_split': 7, 'max_depth': None}
     }
 
     DGP_CONFIGS = [
