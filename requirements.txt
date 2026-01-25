@@ -9,3 +9,5 @@ jupyter
 notebook
 matplotlib
 seaborn
+ds-wgan
+torch
