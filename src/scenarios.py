@@ -102,15 +102,45 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
     return scenarios
 
 
-def get_microscope_scenario(theta: float = 1.0, seed: int = 42) -> ScenarioConfig:
+def get_microscope_scenario(
+    theta: float = 1.0,
+    seed: int = 42,
+    dgp: str = "TreeFriendly"
+) -> ScenarioConfig:
     """Returns a specific configuration for the 'Microscope View' diagnostic."""
+    dgp = str(dgp)
+
+    if dgp == "TreeFriendly":
+        dgp_class = TreeFriendlyDGP
+        dgp_params = {"n_features": 4, "include_collider": True, "theta": theta}
+
+    elif dgp == "PLR":
+        dgp_class = PLRCCDDHNR2018DGP
+        dgp_params = {"n_features": 4, "tau": 1.0, "include_collider": True, "theta": theta}
+
+    elif dgp == "WGAN":
+        dgp_class = WGANDGP
+        dgp_params = {"include_collider": True, "theta": theta}
+
+    else:
+        raise ValueError(f"Unknown dgp='{dgp}'. Use one of: TreeFriendly, PLR, WGAN")
+
     return ScenarioConfig(
-        name="Microscope_Diagnostic",
-        dgp_class=TreeFriendlyDGP,
-        dgp_params={'n_features': 4, 'include_collider': True, 'theta': theta},
+        name=f"Microscope_Diagnostic_{dgp}",
+        dgp_class=dgp_class,
+        dgp_params=dgp_params,
         estimator_class=ReproducibleEconMLEstimator,
-        estimator_params={'n_estimators': 200, 'random_state': seed, 'rf_params': {'n_estimators': 200, 'min_samples_leaf': 1, 'max_features': 0.9, 'n_jobs': -1}},
+        estimator_params={
+            "n_estimators": 200,
+            "random_state": seed,
+            "rf_params": {
+                "n_estimators": 200,
+                "min_samples_leaf": 1,
+                "max_features": 0.9,
+                "n_jobs": -1,
+            },
+        },
         sample_size=2000,
         n_simulations=1,
-        first_seed=seed
+        first_seed=seed,
     )

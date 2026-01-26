@@ -32,9 +32,9 @@ def calculate_metrics(df: pd.DataFrame) -> pd.DataFrame:
                 elif full_method_name.startswith('PLR_'):
                     dgp = 'PLR'
                     method = full_method_name.replace('PLR_', '')
-                elif full_method_name.startswith('WGAN_401k_'):
-                    dgp = 'WGAN_401k'
-                    method = full_method_name.replace('WGAN_401k_', '')
+                elif full_method_name.startswith('WGAN_'):
+                    dgp = 'WGAN'
+                    method = full_method_name.replace('WGAN_', '')
                 else:
                     dgp = 'Unknown'
                     method = full_method_name
