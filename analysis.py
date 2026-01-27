@@ -13,7 +13,6 @@ try:
     from src.evaluation import calculate_metrics
     from src.plotting import (
         plot_microscope_view,
-        plot_rmse_comparison,
         plot_bias_comparison,
         plot_coverage_comparison, 
         plot_bias_variance_grid,
@@ -46,7 +45,6 @@ def main():
         plot_bias_comparison(df, plots_dir)
         plot_coverage_comparison(summary, plots_dir)
         plot_bias_variance_grid(df, plots_dir)
-        plot_rmse_comparison(summary, plots_dir)
         plot_tau_distribution_1x3_by_dgp(df, plots_dir)
 
 

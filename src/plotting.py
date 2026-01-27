@@ -5,7 +5,15 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from matplotlib.lines import Line2D
 
-def plot_microscope_view(dgp, est, theta, output_dir: Path, filename_suffix: str = ""):
+def plot_microscope_view(
+    dgp,
+    est,
+    theta,
+    output_dir: Path,
+    filename_suffix: str = "",
+    wgan_baseline: float = 6250.951,
+    wgan_center: bool = True,
+):
     """
     Microscope diagnostic plot.
 
@@ -14,61 +22,85 @@ def plot_microscope_view(dgp, est, theta, output_dir: Path, filename_suffix: str
 
     - Linear collider is intentionally omitted for clarity.
     - Shows correlation Corr(C, τ̂).
-    - Includes reference line:
+    - Reference line:
         * PLR / TreeFriendly -> True effect (1.0)
-        * WGAN -> Baseline reference
+        * WGAN -> Baseline reference (default = 6250.951)
+
+    WGAN note:
+    If wgan_center=True, the plot is centered at the baseline (plots τ̂ - baseline)
+    and the reference line is at 0.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     dgp_name = getattr(dgp, "name", dgp.__class__.__name__)
-    print(f"Generating Microscope View: {dgp_name} (Theta={theta})")
+    dgp_key = str(dgp_name).lower().strip()
 
-    if not hasattr(est, "cate_estimates") or est.cate_estimates is None:
+    # IMPORTANT: robust WGAN detection
+    is_wgan = ("wgan" in dgp_key)
+
+    print(f"Generating Microscope View: {dgp_name} (Theta={theta}) | is_wgan={is_wgan} | dgp_key={dgp_key}")
+
+    if getattr(est, "cate_estimates", None) is None:
         print("Skipping Microscope View: Estimator has no CATE estimates.")
         return
 
-    if not hasattr(dgp, "C") or dgp.C is None:
+    if getattr(dgp, "C", None) is None:
         print("Skipping Microscope View: DGP has no multiplicative collider.")
         return
 
-    C = dgp.C.flatten()
-    tau_hat = est.cate_estimates.flatten()
+    C = np.asarray(dgp.C).reshape(-1)
+    tau_hat = np.asarray(est.cate_estimates).reshape(-1)
 
-    corr_val = np.corrcoef(C, tau_hat)[0, 1]
+    mask = np.isfinite(C) & np.isfinite(tau_hat)
+    C = C[mask]
+    tau_hat = tau_hat[mask]
+
+    if C.size < 5:
+        print("Skipping Microscope View: Not enough finite observations.")
+        return
+
+    corr_val = float(np.corrcoef(C, tau_hat)[0, 1]) if np.std(C) > 0 and np.std(tau_hat) > 0 else np.nan
+
+    if is_wgan and wgan_center:
+        y = tau_hat - float(wgan_baseline)
+        ref = 0.0
+        ref_label = "Baseline (WGAN) = 0"
+        y_label = "Estimated Treatment Effect (Centered)"
+    else:
+        y = tau_hat
+        if is_wgan:
+            ref = float(wgan_baseline)
+            ref_label = "Baseline (WGAN)"
+        else:
+            ref = 1.0
+            ref_label = "True Effect (1.0)"
+        y_label = "Estimated Treatment Effect"
 
     plt.figure(figsize=(10, 6))
     sns.scatterplot(
         x=C,
-        y=tau_hat,
+        y=y,
         alpha=0.45,
+        s=20,
         color="red",
+        edgecolor=None,
         label="Multiplicative Collider",
     )
 
-    # Reference line
-    if dgp_name.lower() == "wgan":
-        ref = 6250.951
-        ref_label = "Baseline (WGAN)"
-    else:
-        ref = 1.0
-        ref_label = "True Effect"
-
     plt.axhline(ref, color="green", linestyle="--", linewidth=2, label=ref_label)
 
-    plt.title(
-        f"Microscope View: Corr(C, τ̂) = {corr_val:.2f}\n(Theta={theta}) {filename_suffix}",
-        fontsize=13,
-    )
+    corr_txt = f"{corr_val:.2f}" if np.isfinite(corr_val) else "NA"
+    plt.title(f"Microscope View: Corr(C, τ̂) = {corr_txt}\n(Theta={theta}) {filename_suffix}", fontsize=13)
 
     plt.xlabel("Collider Value")
-    plt.ylabel("Estimated Treatment Effect")
-    plt.legend()
+    plt.ylabel(y_label)
     plt.grid(alpha=0.3)
+    plt.legend(loc="upper right")
     plt.tight_layout()
 
-    fname = f"microscope_{dgp_name.lower()}_theta_{theta}{filename_suffix}.png"
-    plt.savefig(output_dir / fname, dpi=200)
+    fname = f"microscope_{'wgan' if is_wgan else dgp_key}_theta_{theta}{filename_suffix}.png"
+    plt.savefig(output_dir / fname, dpi=200, bbox_inches="tight")
     plt.close()
 
     print(f"Saved: {fname}")
@@ -94,114 +126,6 @@ def plot_cate_distribution(est, theta, output_dir: Path):
     plt.grid(True, alpha=0.3)
     plt.savefig(output_dir / f"cate_distribution_theta_{theta}.png")
     plt.close()
-
-
-def plot_rmse_comparison(df: pd.DataFrame, output_dir: Path):
-    """Generates RMSE comparison plots for PLR and TreeFriendly (WGAN excluded: no ground truth)."""
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    required_cols = ["DGP", "Method", "Theta", "RMSE"]
-    if not all(col in df.columns for col in required_cols):
-        raise ValueError("DataFrame must contain DGP, Method, Theta, and RMSE columns.")
-
-    print("Generating Plot: RMSE Comparison (PLR & TreeFriendly)...")
-
-    plot_df = df.copy()
-    plot_df = plot_df[plot_df["DGP"].isin(["PLR", "TreeFriendly"])].copy()
-
-    def parse_scenario_type(method: str) -> str:
-        if method.startswith("Naive_"):
-            return "Naive"
-        if method.startswith("BadControl_"):
-            return "MultiplicativeCollider"
-        if method.startswith("LinearCollider_"):
-            return "LinearCollider"
-        return "Other"
-
-    def parse_estimator(method: str) -> str:
-        if "DoubleML" in method or "DML" in method:
-            return "DoubleML"
-        if "EconML" in method:
-            return "EconML"
-        if "OLS" in method:
-            return "OLS"
-        return "Unknown"
-
-    plot_df["scenario_type"] = plot_df["Method"].apply(parse_scenario_type)
-    plot_df["estimator"] = plot_df["Method"].apply(parse_estimator)
-
-    plot_df = plot_df[
-        plot_df["scenario_type"].isin(["Naive", "MultiplicativeCollider", "LinearCollider"])
-        & plot_df["estimator"].isin(["DoubleML", "EconML", "OLS"])
-    ].copy()
-
-    plot_df = plot_df.sort_values(["DGP", "scenario_type", "Theta", "estimator"])
-
-    dgps = ["PLR", "TreeFriendly"]
-    scenario_order = ["MultiplicativeCollider", "LinearCollider", "Naive"]
-    scenario_title = {
-        "MultiplicativeCollider": "Multiplicative",
-        "LinearCollider": "Linear",
-        "Naive": "Naive",
-    }
-
-    fig, axes = plt.subplots(
-        nrows=len(dgps),
-        ncols=len(scenario_order),
-        figsize=(12, 5),
-        sharex=True,
-    )
-
-    fig.suptitle("RMSE Comparison: PLR & TreeFriendly Scenarios", fontsize=14)
-
-    for i, dgp in enumerate(dgps):
-        for j, scen in enumerate(scenario_order):
-            ax = axes[i, j]
-            sub = plot_df[(plot_df["DGP"] == dgp) & (plot_df["scenario_type"] == scen)]
-
-            if sub.empty:
-                ax.set_axis_off()
-                continue
-
-            sns.lineplot(
-                data=sub,
-                x="Theta",
-                y="RMSE",
-                hue="estimator",
-                marker="o",
-                ax=ax,
-                errorbar=None,
-                legend=False,
-            )
-
-            ax.set_title(f"dgp = {dgp} | scenario = {scenario_title[scen]}", fontsize=10)
-            ax.set_xlabel("theta" if i == len(dgps) - 1 else "")
-            ax.set_ylabel("rmse" if j == 0 else "")
-            ax.grid(True, alpha=0.3)
-
-    from matplotlib.lines import Line2D
-
-    legend_elements = [
-        Line2D([0], [0], color=sns.color_palette()[0], marker="o", label="DoubleML"),
-        Line2D([0], [0], color=sns.color_palette()[1], marker="o", label="EconML"),
-        Line2D([0], [0], color=sns.color_palette()[2], marker="o", label="OLS"),
-    ]
-
-    fig.legend(
-        handles=legend_elements,
-        title="estimator",
-        loc="center right",
-        bbox_to_anchor=(0.93, 0.5),
-        frameon=True,
-    )
-
-    plt.tight_layout(rect=[0, 0, 0.80, 0.95])
-    plt.savefig(output_dir / "rmse_comparison_plr_treefriendly.png", dpi=200)
-    plt.close()
-
-    print("Saved: rmse_comparison_plr_treefriendly.png")
-
 
 def plot_bias_comparison(df: pd.DataFrame, output_dir: Path):
     """
@@ -767,12 +691,7 @@ def plot_tau_distribution_1x3_by_dgp(df: pd.DataFrame, output_dir: Path):
         ref_label = "WGAN Reference" if dgp == "WGAN" else "True Effect (1.0)"
 
         fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(16, 5), sharey=False)
-        fig.suptitle(
-            f"{dgp}: Distribution of Estimates",
-            fontsize=18,
-        )
 
-        # Define filename EARLY (important!)
         fname = f"Distribution_of_Estimates_{dgp.lower()}.png"
 
         for j, est in enumerate(estimators):
@@ -854,8 +773,11 @@ def plot_tau_distribution_1x3_by_dgp(df: pd.DataFrame, output_dir: Path):
             frameon=True,
         )
 
-        plt.tight_layout(rect=[0, 0, 0.86, 0.92])
-        plt.savefig(output_dir / fname, dpi=200, bbox_inches="tight")
+        plt.tight_layout(rect=[0, 0, 0.86, 1.0])
+        plt.savefig(
+            output_dir / fname,
+            dpi=250,
+            bbox_inches="tight",
+            pad_inches=0.02
+        )
         plt.close()
-
-        print(f"Saved: {fname}")
