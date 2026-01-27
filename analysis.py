@@ -12,9 +12,6 @@ sys.path.append(str(Path.cwd()))
 try:
     from src.evaluation import calculate_metrics
     from src.plotting import (
-        plot_standard_metrics,
-        plot_bias_distribution,
-        plot_bias_variance,
         plot_microscope_view,
         plot_rmse_comparison,
         plot_bias_comparison,
@@ -46,9 +43,6 @@ def main():
         summary, df = calculate_metrics(df)
         summary.to_csv(results_basedir / 'detailed_summary_metrics.csv', index=False)
 
-        plot_standard_metrics(df, summary, plots_dir)
-        plot_bias_distribution(df, plots_dir)
-        plot_bias_variance(df, plots_dir)
         plot_bias_comparison(df, plots_dir)
         plot_coverage_comparison(summary, plots_dir)
         plot_bias_variance_grid(df, plots_dir)

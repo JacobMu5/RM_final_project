@@ -3,331 +3,50 @@ import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-
-
-def plot_standard_metrics(df: pd.DataFrame, summary: pd.DataFrame, output_dir: Path):
-    """Generates standard metric plots: Bias, Spurious Correlation, and Coverage."""
-    output_dir = Path(output_dir)
-    print("Generating Standard Plots...")
-
-    all_thetas = sorted(df['Theta'].unique())
-    naive_rows = df[df['Method'].str.contains("Naive")].copy()
-    
-    if not naive_rows.empty:
-        virtual_rows = []
-        for method in naive_rows['Method'].unique():
-            method_subset = naive_rows[naive_rows['Method'] == method]
-            base_data = method_subset[method_subset['Theta'] == 0.0]
-            
-            if base_data.empty and not method_subset.empty:
-                base_data = method_subset.iloc[[0]]
-            
-            if not base_data.empty:
-                for t in all_thetas:
-                    if t == 0.0: continue
-                    
-                    filled = base_data.copy()
-                    filled['Theta'] = t 
-                    virtual_rows.append(filled)
-        
-        if virtual_rows:
-            df_virtual = pd.concat(virtual_rows, ignore_index=True)
-            df = pd.concat([df, df_virtual], ignore_index=True)   
-
-    plt.figure(figsize=(10, 6))
-    sns.lineplot(
-        data=df,
-        x='Theta',
-        y='bias',
-        hue='Method',
-        style='Method',
-        markers=True,
-        err_style='bars',
-        err_kws={'capsize': 5}
-    )
-    plt.axhline(0, color='black', linestyle=':', label='Zero Bias')
-    plt.title('Bias vs Collider Strength')
-    plt.ylabel('Bias')
-    plt.xlabel('Theta (Collider Strength)')
-    plt.grid(True)
-    plt.legend()
-    plt.savefig(output_dir / 'bias_plot.png')
-    plt.close()
-
-    plt.figure(figsize=(10, 6))
-    sns.lineplot(
-        data=df,
-        x='Theta',
-        y='spurious_corr_mult',
-        hue='Method',
-        style='Method',
-        markers=True
-    )
-    plt.title('Spurious Heterogeneity vs Multiplicative Collider Strength')
-    plt.ylabel('Correlation(CATE, Multiplicative Collider)')
-    plt.xlabel('Theta (Collider Strength)')
-    plt.grid(True)
-    plt.savefig(output_dir / 'spurious_corr_mult_plot.png')
-    plt.close()
-
-    plt.figure(figsize=(10, 6))
-    sns.lineplot(
-        data=df,
-        x='Theta',
-        y='spurious_corr_linear',
-        hue='Method',
-        style='Method',
-        markers=True
-    )
-    plt.title('Spurious Heterogeneity vs Linear Collider Strength')
-    plt.ylabel('Correlation(CATE, Linear Collider)')
-    plt.xlabel('Theta (Collider Strength)')
-    plt.grid(True)
-    plt.savefig(output_dir / 'spurious_corr_linear_plot.png')
-    plt.close()
-
-    plt.figure(figsize=(10, 6))
-    sns.lineplot(
-        data=summary,
-        x='Theta',
-        y='Coverage',
-        hue='Method',
-        style='Method',
-        markers=True,
-        errorbar=None
-    )
-    plt.axhline(0.95, color='red', linestyle='--', label='Target (0.95)')
-    plt.axhline(0.90, color='gray', linestyle=':', label='Threshold (0.90)')
-    plt.title('True Coverage Rate')
-    plt.ylabel('Coverage Rate')
-    plt.xlabel('Theta (Collider Strength)')
-    plt.grid(True)
-    plt.savefig(output_dir / 'true_coverage_plot.png')
-    plt.close()
-
-    if 'Centered_Coverage' in summary.columns:
-        plt.figure(figsize=(10, 7))
-        sns.lineplot(
-            data=summary,
-            x='Theta',
-            y='Centered_Coverage',
-            hue='Method',
-            style='Method',
-            markers=True,
-            errorbar=None
-        )
-        plt.axhline(0.95, color='red', linestyle='--', label='Target (0.95)')
-        plt.axhline(0.90, color='gray', linestyle=':', label='Threshold (0.90)')
-        plt.title('Centered Coverage Rate (validity check)')
-        plt.ylabel('Centered Coverage Rate')
-        plt.xlabel('Theta (Collider Strength)')
-        plt.ylim(0, 1.05)
-        plt.grid(True)
-        
-        plt.figtext(0.5, 0.02, 
-                    "Measures if CI captures the Estimator's Mean (ignoring Bias).\n"
-                    "High Centered Coverage + Low True Coverage = 'Precisely Wrong' (Biased but Valid CI).", 
-                    ha='center', fontsize=10, color='gray')
-        plt.subplots_adjust(bottom=0.15)
-        plt.savefig(output_dir / 'centered_coverage_plot.png')
-        plt.close()
-
-def plot_bias_distribution(df: pd.DataFrame, output_dir: Path):
-    """
-    KDE plots of estimate distributions by DGP and estimator.
-
-    For PLR/TreeFriendly: includes True Effect line at 1.0 (simulation truth).
-    For WGAN: NO true effect line (real data, unknown truth). Interpret as sensitivity.
-    """
-    output_dir = Path(output_dir)
-
-    required_cols = ['DGP', 'Method', 'Theta', 'tau_hat']
-    if not all(col in df.columns for col in required_cols):
-        raise ValueError("DataFrame must contain DGP, Method, Theta, and tau_hat columns.")
-
-    dgps = sorted(df['DGP'].dropna().unique())
-    estimators = ['DoubleML', 'EconML', 'OLS']
-
-    for dgp in dgps:
-        df_dgp = df[df['DGP'] == dgp].copy()
-
-        for est in estimators:
-            print(f"Generating Estimate Distribution (KDE): DGP={dgp}, Estimator={est}")
-
-            subsets = []
-
-            # Naive specification
-            naive = df_dgp[df_dgp['Method'].str.contains(f'Naive_{est}', regex=False)].copy()
-            if not naive.empty:
-                naive['Spec'] = 'Naive'
-                subsets.append(naive)
-
-            # Multiplicative collider (theta = 1 only)
-            bad1 = df_dgp[
-                (df_dgp['Method'].str.contains(f'BadControl_{est}', regex=False)) &
-                (df_dgp['Theta'] == 1.0)
-            ].copy()
-            if not bad1.empty:
-                bad1['Spec'] = 'Multiplicative Collider (Theta=1.0)'
-                subsets.append(bad1)
-
-            # Linear collider (theta = 1 only)
-            lin1 = df_dgp[
-                (df_dgp['Method'].str.contains(f'LinearCollider_{est}', regex=False)) &
-                (df_dgp['Theta'] == 1.0)
-            ].copy()
-            if not lin1.empty:
-                lin1['Spec'] = 'Linear Collider (Theta=1.0)'
-                subsets.append(lin1)
-
-            if not subsets:
-                print(f"Skipping: No data for DGP={dgp}, Estimator={est}")
-                continue
-
-            plot_df = pd.concat(subsets, ignore_index=True)
-
-            plt.figure(figsize=(10, 6))
-            ax = sns.kdeplot(
-                data=plot_df,
-                x='tau_hat',
-                hue='Spec',
-                fill=True,
-                common_norm=False
-            )
-
-            if dgp != 'WGAN':
-                plt.axvline(1.0, color='black', linestyle='--', label='True Effect (1.0)')
-                plt.title(f'{dgp}: Distribution of {est} Estimates', fontsize=14)
-            else:
-                plt.title(f'{dgp}: Distribution of {est} Estimates (No Ground Truth)', fontsize=14)
-
-            plt.xlabel('Estimated Treatment Effect (Tau Hat)')
-            sns.move_legend(ax, "upper right")
-            plt.tight_layout()
-
-            filename = (
-                f"estimate_distribution_{est.lower()}_{dgp}.png"
-                if dgp == 'WGAN'
-                else f"bias_distribution_{est.lower()}_{dgp}.png"
-            )
-            plt.savefig(output_dir / filename)
-            plt.close()
-
-def plot_bias_variance(df: pd.DataFrame, output_dir: Path):
-    """Bias^2 vs Variance decomposition for each method."""
-    output_dir = Path(output_dir)
-    print("Generating Plot: Bias-Variance Decomposition (Stacked)...")
-
-    target_methods = [
-        'BadControl_DML', 'BadControl_EconML', 'BadControl_OLS',
-        'LinearCollider_DML', 'LinearCollider_EconML', 'LinearCollider_OLS'
-    ]
-
-    for target_method in target_methods:
-        if target_method not in df['Method'].values:
-            continue
-
-        metrics = []
-        thetas = sorted(df['Theta'].unique())
-
-        for theta in thetas:
-            sub = df[(df['Method'] == target_method) & (df['Theta'] == theta)]
-            if not sub.empty:
-                bias_sq = (sub['tau_hat'].mean() - 1.0) ** 2
-                variance = sub['tau_hat'].var()
-                metrics.append({
-                    'Theta': theta,
-                    'Bias^2': bias_sq,
-                    'Variance': variance
-                })
-
-        df_bv = pd.DataFrame(metrics)
-        if not df_bv.empty:
-            plt.figure(figsize=(10, 6))
-            plt.stackplot(
-                df_bv['Theta'],
-                df_bv['Bias^2'],
-                df_bv['Variance'],
-                labels=['Bias^2', 'Variance'],
-                colors=['#ff9999', '#66b3ff'],
-                alpha=0.8
-            )
-            plt.title(f'Bias-Variance Decomposition ({target_method})', fontsize=14)
-            plt.xlabel('Theta (Collider Strength)')
-            plt.ylabel('Mean Squared Error (MSE)')
-            plt.legend(loc='upper left')
-            plt.tight_layout()
-
-            if target_method.startswith("BadControl_"):
-                method_suffix = target_method.replace("BadControl_", "").lower() + "_mult"
-            elif target_method.startswith("LinearCollider_"):
-                method_suffix = target_method.replace("LinearCollider_", "").lower() + "_linear"
-            else:
-                method_suffix = target_method.lower()
-
-            plt.savefig(output_dir / f"bias_variance_decomposition_{method_suffix}.png")
-            plt.close()
-
+from matplotlib.lines import Line2D
 
 def plot_microscope_view(dgp, est, theta, output_dir: Path, filename_suffix: str = ""):
     """
-    Scatter plot of estimated CATE vs colliders.
-    Generates ONE plot per DGP.
-    """
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    from pathlib import Path
+    Microscope diagnostic plot.
 
+    Scatter plot of estimated individual treatment effects (CATEs)
+    against the multiplicative collider.
+
+    - Linear collider is intentionally omitted for clarity.
+    - Shows correlation Corr(C, τ̂).
+    - Includes reference line:
+        * PLR / TreeFriendly -> True effect (1.0)
+        * WGAN -> Baseline reference
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     dgp_name = getattr(dgp, "name", dgp.__class__.__name__)
-
-    print(f"Generating Microscope View: DGP={dgp_name} {filename_suffix}")
+    print(f"Generating Microscope View: {dgp_name} (Theta={theta})")
 
     if not hasattr(est, "cate_estimates") or est.cate_estimates is None:
         print("Skipping Microscope View: Estimator has no CATE estimates.")
         return
 
+    if not hasattr(dgp, "C") or dgp.C is None:
+        print("Skipping Microscope View: DGP has no multiplicative collider.")
+        return
+
+    C = dgp.C.flatten()
+    tau_hat = est.cate_estimates.flatten()
+
+    corr_val = np.corrcoef(C, tau_hat)[0, 1]
+
     plt.figure(figsize=(10, 6))
-    title_parts = []
+    sns.scatterplot(
+        x=C,
+        y=tau_hat,
+        alpha=0.45,
+        color="red",
+        label="Multiplicative Collider",
+    )
 
-    # --- Multiplicative collider ---
-    if hasattr(dgp, "C") and dgp.C is not None:
-        corr_val = np.corrcoef(
-            dgp.C.flatten(),
-            est.cate_estimates.flatten()
-        )[0, 1]
-
-        title_parts.append(f"Corr(C, τ̂) = {corr_val:.2f}")
-
-        sns.scatterplot(
-            x=dgp.C.flatten(),
-            y=est.cate_estimates.flatten(),
-            alpha=0.45,
-            color="red",
-            label="Multiplicative Collider"
-        )
-
-    # --- Linear collider ---
-    if hasattr(dgp, "C_linear") and dgp.C_linear is not None:
-        corr_val_lin = np.corrcoef(
-            dgp.C_linear.flatten(),
-            est.cate_estimates.flatten()
-        )[0, 1]
-
-        title_parts.append(f"Corr(C_lin, τ̂) = {corr_val_lin:.2f}")
-
-        sns.scatterplot(
-            x=dgp.C_linear.flatten(),
-            y=est.cate_estimates.flatten(),
-            alpha=0.45,
-            color="blue",
-            label="Linear Collider"
-        )
-
-    # --- Reference line ---
+    # Reference line
     if dgp_name.lower() == "wgan":
         ref = 6250.951
         ref_label = "Baseline (WGAN)"
@@ -337,10 +56,9 @@ def plot_microscope_view(dgp, est, theta, output_dir: Path, filename_suffix: str
 
     plt.axhline(ref, color="green", linestyle="--", linewidth=2, label=ref_label)
 
-    metrics_str = " | ".join(title_parts)
     plt.title(
-        f"Microscope View: {dgp_name}\n{metrics_str} (Theta={theta})",
-        fontsize=13
+        f"Microscope View: Corr(C, τ̂) = {corr_val:.2f}\n(Theta={theta}) {filename_suffix}",
+        fontsize=13,
     )
 
     plt.xlabel("Collider Value")
@@ -355,89 +73,84 @@ def plot_microscope_view(dgp, est, theta, output_dir: Path, filename_suffix: str
 
     print(f"Saved: {fname}")
 
+
 def plot_cate_distribution(est, theta, output_dir: Path):
     """Plots the histogram of CATE estimates."""
     output_dir = Path(output_dir)
     print("Generating Plot: CATE Distribution...")
 
-    if not hasattr(est, 'cate_estimates') or est.cate_estimates is None:
+    if not hasattr(est, "cate_estimates") or est.cate_estimates is None:
         return
 
     cates = est.cate_estimates.flatten()
-    
+
     plt.figure(figsize=(10, 6))
-    sns.histplot(cates, kde=True, color='purple', bins=30)
-    plt.axvline(1.0, color='black', linestyle='--', linewidth=2, label='True Effect (1.0)')
-    plt.title(f'Spurious Heterogeneity Distribution (Theta={theta})', fontsize=14)
-    plt.xlabel('Estimated CATE')
-    plt.ylabel('Frequency')
+    sns.histplot(cates, kde=True, color="purple", bins=30)
+    plt.axvline(1.0, color="black", linestyle="--", linewidth=2, label="True Effect (1.0)")
+    plt.title(f"Spurious Heterogeneity Distribution (Theta={theta})", fontsize=14)
+    plt.xlabel("Estimated CATE")
+    plt.ylabel("Frequency")
     plt.legend()
     plt.grid(True, alpha=0.3)
-    plt.savefig(output_dir / f'cate_distribution_theta_{theta}.png')
+    plt.savefig(output_dir / f"cate_distribution_theta_{theta}.png")
     plt.close()
 
-def plot_rmse_comparison(df: pd.DataFrame, output_dir: Path):
-    """
-    RMSE comparison plot, split by DGP and scenario_type.
 
-    - Excludes WGAN (no ground truth).
-    - Includes all thetas available in the data.
-    - Panels: rows = DGP (PLR, TreeFriendly), cols = scenario_type
-    - Lines: estimator (DoubleML, EconML, OLS)
-    """
+def plot_rmse_comparison(df: pd.DataFrame, output_dir: Path):
+    """Generates RMSE comparison plots for PLR and TreeFriendly (WGAN excluded: no ground truth)."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    required_cols = ['DGP', 'Method', 'Theta', 'RMSE']
+    required_cols = ["DGP", "Method", "Theta", "RMSE"]
     if not all(col in df.columns for col in required_cols):
         raise ValueError("DataFrame must contain DGP, Method, Theta, and RMSE columns.")
 
     print("Generating Plot: RMSE Comparison (PLR & TreeFriendly)...")
 
     plot_df = df.copy()
-    plot_df = plot_df[plot_df['DGP'].isin(['PLR', 'TreeFriendly'])].copy()
+    plot_df = plot_df[plot_df["DGP"].isin(["PLR", "TreeFriendly"])].copy()
 
     def parse_scenario_type(method: str) -> str:
-        if method.startswith('Naive_'):
-            return 'Naive'
-        if method.startswith('BadControl_'):
-            return 'MultiplicativeCollider'
-        if method.startswith('LinearCollider_'):
-            return 'LinearCollider'
-        return 'Other'
+        if method.startswith("Naive_"):
+            return "Naive"
+        if method.startswith("BadControl_"):
+            return "MultiplicativeCollider"
+        if method.startswith("LinearCollider_"):
+            return "LinearCollider"
+        return "Other"
 
     def parse_estimator(method: str) -> str:
-        if 'DoubleML' in method or 'DML' in method:
-            return 'DoubleML'
-        if 'EconML' in method:
-            return 'EconML'
-        if 'OLS' in method:
-            return 'OLS'
-        return 'Unknown'
+        if "DoubleML" in method or "DML" in method:
+            return "DoubleML"
+        if "EconML" in method:
+            return "EconML"
+        if "OLS" in method:
+            return "OLS"
+        return "Unknown"
 
-    plot_df['scenario_type'] = plot_df['Method'].apply(parse_scenario_type)
-    plot_df['estimator'] = plot_df['Method'].apply(parse_estimator)
+    plot_df["scenario_type"] = plot_df["Method"].apply(parse_scenario_type)
+    plot_df["estimator"] = plot_df["Method"].apply(parse_estimator)
 
     plot_df = plot_df[
-        plot_df['scenario_type'].isin(['Naive', 'MultiplicativeCollider', 'LinearCollider']) &
-        plot_df['estimator'].isin(['DoubleML', 'EconML', 'OLS'])
+        plot_df["scenario_type"].isin(["Naive", "MultiplicativeCollider", "LinearCollider"])
+        & plot_df["estimator"].isin(["DoubleML", "EconML", "OLS"])
     ].copy()
 
-    plot_df = plot_df.sort_values(['DGP', 'scenario_type', 'Theta', 'estimator'])
+    plot_df = plot_df.sort_values(["DGP", "scenario_type", "Theta", "estimator"])
 
-    dgps = ['PLR', 'TreeFriendly']
-    scenario_order = ['MultiplicativeCollider', 'LinearCollider', 'Naive']
+    dgps = ["PLR", "TreeFriendly"]
+    scenario_order = ["MultiplicativeCollider", "LinearCollider", "Naive"]
     scenario_title = {
-        'MultiplicativeCollider': 'Multiplicative',
-        'LinearCollider': 'Linear',
-        'Naive': 'Naive'
+        "MultiplicativeCollider": "Multiplicative",
+        "LinearCollider": "Linear",
+        "Naive": "Naive",
     }
 
     fig, axes = plt.subplots(
         nrows=len(dgps),
         ncols=len(scenario_order),
         figsize=(12, 5),
-        sharex=True
+        sharex=True,
     )
 
     fig.suptitle("RMSE Comparison: PLR & TreeFriendly Scenarios", fontsize=14)
@@ -445,7 +158,7 @@ def plot_rmse_comparison(df: pd.DataFrame, output_dir: Path):
     for i, dgp in enumerate(dgps):
         for j, scen in enumerate(scenario_order):
             ax = axes[i, j]
-            sub = plot_df[(plot_df['DGP'] == dgp) & (plot_df['scenario_type'] == scen)]
+            sub = plot_df[(plot_df["DGP"] == dgp) & (plot_df["scenario_type"] == scen)]
 
             if sub.empty:
                 ax.set_axis_off()
@@ -453,13 +166,13 @@ def plot_rmse_comparison(df: pd.DataFrame, output_dir: Path):
 
             sns.lineplot(
                 data=sub,
-                x='Theta',
-                y='RMSE',
-                hue='estimator',
-                marker='o',
+                x="Theta",
+                y="RMSE",
+                hue="estimator",
+                marker="o",
                 ax=ax,
                 errorbar=None,
-                legend=False   # <- CLAVE
+                legend=False,
             )
 
             ax.set_title(f"dgp = {dgp} | scenario = {scenario_title[scen]}", fontsize=10)
@@ -470,9 +183,9 @@ def plot_rmse_comparison(df: pd.DataFrame, output_dir: Path):
     from matplotlib.lines import Line2D
 
     legend_elements = [
-        Line2D([0], [0], color=sns.color_palette()[0], marker='o', label='DoubleML'),
-        Line2D([0], [0], color=sns.color_palette()[1], marker='o', label='EconML'),
-        Line2D([0], [0], color=sns.color_palette()[2], marker='o', label='OLS'),
+        Line2D([0], [0], color=sns.color_palette()[0], marker="o", label="DoubleML"),
+        Line2D([0], [0], color=sns.color_palette()[1], marker="o", label="EconML"),
+        Line2D([0], [0], color=sns.color_palette()[2], marker="o", label="OLS"),
     ]
 
     fig.legend(
@@ -480,7 +193,7 @@ def plot_rmse_comparison(df: pd.DataFrame, output_dir: Path):
         title="estimator",
         loc="center right",
         bbox_to_anchor=(0.93, 0.5),
-        frameon=True
+        frameon=True,
     )
 
     plt.tight_layout(rect=[0, 0, 0.80, 0.95])
@@ -495,109 +208,104 @@ def plot_bias_comparison(df: pd.DataFrame, output_dir: Path):
     2x3 layout:
       rows = scenario (Multiplicative, Linear)
       cols = DGP (TreeFriendly, PLR, WGAN)
-    - No Naive
-    - Para PLR/TreeFriendly: usa bias_mean (o bias)
-    - Para WGAN: usa sensibilidad = mean(tau_hat(theta)) - mean(tau_hat(theta=0))
-    - Una sola leyenda afuera, sin invadir paneles
+
+    - Excludes Naive.
+    - For PLR/TreeFriendly: plots bias_mean (or bias).
+    - For WGAN: plots sensitivity = mean(tau_hat(theta)) - mean(tau_hat(theta=0)).
+    - Single global legend outside (no overlap).
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    required_cols = ['DGP', 'Method', 'Theta']
+    required_cols = ["DGP", "Method", "Theta"]
     if not all(col in df.columns for col in required_cols):
         raise ValueError("DataFrame must contain DGP, Method, and Theta columns.")
 
-    # Elegir columna de bias si existe
+    # Choose bias column if available
     bias_col = None
-    if 'Bias_Mean' in df.columns:
-        bias_col = 'Bias_Mean'
-    elif 'bias_mean' in df.columns:
-        bias_col = 'bias_mean'
-    elif 'bias' in df.columns:
-        bias_col = 'bias'
+    if "Bias_Mean" in df.columns:
+        bias_col = "Bias_Mean"
+    elif "bias_mean" in df.columns:
+        bias_col = "bias_mean"
+    elif "bias" in df.columns:
+        bias_col = "bias"
 
-    # Para WGAN necesitamos tau_hat para armar la sensibilidad
-    has_tau_hat = 'tau_hat' in df.columns
+    has_tau_hat = "tau_hat" in df.columns
 
-    dgps = ['TreeFriendly', 'PLR', 'WGAN']
-    scenarios = ['Multiplicative', 'Linear']
+    dgps = ["TreeFriendly", "PLR", "WGAN"]
+    scenarios = ["Multiplicative", "Linear"]
 
     plot_df = df.copy()
-    plot_df = plot_df[plot_df['DGP'].isin(dgps)].copy()
+    plot_df = plot_df[plot_df["DGP"].isin(dgps)].copy()
 
     def parse_scenario(method: str) -> str:
-        if method.startswith('BadControl_'):
-            return 'Multiplicative'
-        if method.startswith('LinearCollider_'):
-            return 'Linear'
-        return 'Other'
+        if method.startswith("BadControl_"):
+            return "Multiplicative"
+        if method.startswith("LinearCollider_"):
+            return "Linear"
+        return "Other"
 
     def parse_estimator(method: str) -> str:
-        if 'DoubleML' in method or 'DML' in method:
-            return 'DoubleML'
-        if 'EconML' in method:
-            return 'EconML'
-        if 'OLS' in method:
-            return 'OLS'
-        return 'Unknown'
+        if "DoubleML" in method or "DML" in method:
+            return "DoubleML"
+        if "EconML" in method:
+            return "EconML"
+        if "OLS" in method:
+            return "OLS"
+        return "Unknown"
 
-    plot_df['scenario'] = plot_df['Method'].apply(parse_scenario)
-    plot_df['estimator'] = plot_df['Method'].apply(parse_estimator)
+    plot_df["scenario"] = plot_df["Method"].apply(parse_scenario)
+    plot_df["estimator"] = plot_df["Method"].apply(parse_estimator)
 
     plot_df = plot_df[
-        plot_df['scenario'].isin(scenarios) &
-        plot_df['estimator'].isin(['DoubleML', 'EconML', 'OLS'])
+        plot_df["scenario"].isin(scenarios)
+        & plot_df["estimator"].isin(["DoubleML", "EconML", "OLS"])
     ].copy()
 
-    # --- construir la métrica a graficar ---
-    # Para PLR/TreeFriendly: bias (si existe)
-    # Para WGAN: delta vs theta=0 usando tau_hat (si está disponible)
+    print("Generating Plot: Bias Comparison (2x3 Grid: TreeFriendly, PLR, WGAN)...")
+
     metric_rows = []
 
-    # (A) PLR/TreeFriendly
+    # (A) PLR / TreeFriendly -> bias metric
     if bias_col is None:
-        raise ValueError("Para PLR/TreeFriendly necesito Bias_Mean/bias_mean/bias. No encontré ninguna.")
-    sim = plot_df[plot_df['DGP'].isin(['PLR', 'TreeFriendly'])].copy()
+        raise ValueError("For PLR/TreeFriendly I need Bias_Mean/bias_mean/bias, but none was found.")
+
+    sim = plot_df[plot_df["DGP"].isin(["PLR", "TreeFriendly"])].copy()
     if not sim.empty:
-        sim_metric = sim[['DGP', 'scenario', 'estimator', 'Theta', bias_col]].copy()
-        sim_metric = sim_metric.rename(columns={bias_col: 'metric'})
-        sim_metric['metric_name'] = 'bias_mean'
+        sim_metric = sim[["DGP", "scenario", "estimator", "Theta", bias_col]].copy()
+        sim_metric = sim_metric.rename(columns={bias_col: "metric"})
         metric_rows.append(sim_metric)
 
-    # (B) WGAN (sensibilidad)
-    wgan = plot_df[plot_df['DGP'] == 'WGAN'].copy()
+    # (B) WGAN -> sensitivity vs theta=0
+    wgan = plot_df[plot_df["DGP"] == "WGAN"].copy()
     if not wgan.empty:
         if not has_tau_hat:
-            # si no hay tau_hat, al menos no rompas: no puedes construir delta
-            # (mejor que graficar bias sin sentido)
-            print("Warning: WGAN sin tau_hat -> no puedo calcular sensibilidad vs theta=0. Se omite WGAN.")
+            print("Warning: WGAN data has no tau_hat -> cannot compute sensitivity vs theta=0. Skipping WGAN.")
         else:
-            # agregamos por (scenario, estimator, theta)
             wgan_mean = (
-                wgan.groupby(['scenario', 'estimator', 'Theta'], as_index=False)['tau_hat']
+                wgan.groupby(["scenario", "estimator", "Theta"], as_index=False)["tau_hat"]
                 .mean()
-                .rename(columns={'tau_hat': 'tau_mean'})
+                .rename(columns={"tau_hat": "tau_mean"})
             )
-            # baseline theta=0 por (scenario, estimator)
-            base = wgan_mean[wgan_mean['Theta'] == 0.0][['scenario', 'estimator', 'tau_mean']] \
-                .rename(columns={'tau_mean': 'tau_base'})
+            base = (
+                wgan_mean[wgan_mean["Theta"] == 0.0][["scenario", "estimator", "tau_mean"]]
+                .rename(columns={"tau_mean": "tau_base"})
+            )
 
-            wgan_m = wgan_mean.merge(base, on=['scenario', 'estimator'], how='left')
-            wgan_m['metric'] = wgan_m['tau_mean'] - wgan_m['tau_base']
-            wgan_m['DGP'] = 'WGAN'
-            wgan_m['metric_name'] = 'delta_tau_vs_theta0'
-            metric_rows.append(wgan_m[['DGP', 'scenario', 'estimator', 'Theta', 'metric', 'metric_name']])
+            wgan_m = wgan_mean.merge(base, on=["scenario", "estimator"], how="left")
+            wgan_m["metric"] = wgan_m["tau_mean"] - wgan_m["tau_base"]
+            wgan_m["DGP"] = "WGAN"
+            metric_rows.append(wgan_m[["DGP", "scenario", "estimator", "Theta", "metric"]])
 
     metric_df = pd.concat(metric_rows, ignore_index=True)
-    metric_df = metric_df.sort_values(['scenario', 'DGP', 'Theta', 'estimator'])
+    metric_df = metric_df.sort_values(["scenario", "DGP", "Theta", "estimator"])
 
-    # --- plot 2x3 ---
     fig, axes = plt.subplots(
         nrows=len(scenarios),
         ncols=len(dgps),
         figsize=(15, 6),
         sharex=True,
-        sharey=False  # <- CLAVE: evita que WGAN aplaste a los demás
+        sharey=False,
     )
     fig.suptitle("Bias Comparison: PLR, TreeFriendly & WGAN", fontsize=14)
 
@@ -607,68 +315,64 @@ def plot_bias_comparison(df: pd.DataFrame, output_dir: Path):
         for j, dgp in enumerate(dgps):
             ax = axes[i, j]
 
-            sub = metric_df[(metric_df['scenario'] == scen) & (metric_df['DGP'] == dgp)].copy()
+            sub = metric_df[(metric_df["scenario"] == scen) & (metric_df["DGP"] == dgp)].copy()
             if sub.empty:
                 ax.set_axis_off()
                 continue
 
             sns.lineplot(
                 data=sub,
-                x='Theta',
-                y='metric',
-                hue='estimator',
-                marker='o',
+                x="Theta",
+                y="metric",
+                hue="estimator",
+                marker="o",
                 ax=ax,
-                errorbar=None
+                errorbar=None,
             )
 
-            # Capturar leyenda una sola vez
             if legend_handles is None:
                 legend_handles, legend_labels = ax.get_legend_handles_labels()
             if ax.get_legend() is not None:
                 ax.get_legend().remove()
 
-            ax.axhline(0.0, color='black', linestyle='--', linewidth=1)
+            ax.axhline(0.0, color="black", linestyle="--", linewidth=1)
             ax.set_title(f"dgp = {dgp} | scenario = {scen}", fontsize=10)
             ax.set_xlabel("theta" if i == len(scenarios) - 1 else "")
-            ax.set_ylabel("bias_mean" if (j == 0 and dgp != 'WGAN') else ("Δ tau vs θ=0" if (j == 0 and dgp == 'WGAN') else ""))
+            ax.set_ylabel(
+                "bias_mean" if (j == 0 and dgp != "WGAN") else ("Δ tau vs θ=0" if (j == 0 and dgp == "WGAN") else "")
+            )
             ax.grid(True, alpha=0.3)
 
-    # Leyenda afuera (sin invadir)
     fig.legend(
         legend_handles,
         legend_labels,
         title="estimator",
         loc="center left",
         bbox_to_anchor=(0.90, 0.5),
-        frameon=True
+        frameon=True,
     )
 
     plt.tight_layout(rect=[0, 0, 0.88, 0.95])
-    plt.savefig(output_dir / "bias_comparison_2x3_plr_treefriendly_wgan.png", dpi=200)
+    plt.savefig(output_dir / "bias_comparison.png", dpi=200)
     plt.close()
-    print("Saved: bias_comparison_2x3_plr_treefriendly_wgan.png")
+
+    print("Saved: bias_comparison.png")
+
 
 def plot_coverage_comparison(summary: pd.DataFrame, output_dir: Path):
     """
     Coverage comparison plot, split by scenario and DGP.
 
-    - Includes PLR, TreeFriendly, WGAN
-    - Excludes Naive
-    - Panels: rows = scenario (Multiplicative, Linear)
-              cols = DGP (TreeFriendly, PLR, WGAN)
-    - Lines: estimator (DoubleML, EconML, OLS)
-    - Single global legend (no overlap).
+    - Includes TreeFriendly, PLR, WGAN.
+    - Excludes Naive.
+    - Panels: rows = scenario (Multiplicative, Linear); cols = DGP (TreeFriendly, PLR, WGAN).
+    - Lines: estimator (DoubleML, EconML, OLS).
+    - Single global legend outside (no overlap).
     """
-
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    from pathlib import Path
-
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    required_cols = ['DGP', 'Method', 'Theta', 'Coverage']
+    required_cols = ["DGP", "Method", "Theta", "Coverage"]
     if not all(col in summary.columns for col in required_cols):
         raise ValueError("summary must contain DGP, Method, Theta, and Coverage columns.")
 
@@ -676,57 +380,46 @@ def plot_coverage_comparison(summary: pd.DataFrame, output_dir: Path):
 
     plot_df = summary.copy()
 
-    # ---- scenario / estimator parsers --------------------------------------
     def parse_scenario(method: str) -> str:
-        if method.startswith('BadControl_'):
-            return 'Multiplicative'
-        if method.startswith('LinearCollider_'):
-            return 'Linear'
-        return 'Other'
+        if method.startswith("BadControl_"):
+            return "Multiplicative"
+        if method.startswith("LinearCollider_"):
+            return "Linear"
+        return "Other"
 
     def parse_estimator(method: str) -> str:
-        if method.endswith('_DoubleML') or method.endswith('_DML'):
-            return 'DoubleML'
-        if method.endswith('_EconML'):
-            return 'EconML'
-        if method.endswith('_OLS'):
-            return 'OLS'
-        if 'DoubleML' in method or 'DML' in method:
-            return 'DoubleML'
-        if 'EconML' in method:
-            return 'EconML'
-        if 'OLS' in method:
-            return 'OLS'
-        return 'Unknown'
+        m = str(method)
+        if m.endswith("_DoubleML") or m.endswith("_DML") or "DoubleML" in m or "DML" in m:
+            return "DoubleML"
+        if m.endswith("_EconML") or "EconML" in m:
+            return "EconML"
+        if m.endswith("_OLS") or "OLS" in m:
+            return "OLS"
+        return "Unknown"
 
-    plot_df['scenario'] = plot_df['Method'].apply(parse_scenario)
-    plot_df['estimator'] = plot_df['Method'].apply(parse_estimator)
+    plot_df["scenario"] = plot_df["Method"].astype(str).apply(parse_scenario)
+    plot_df["estimator"] = plot_df["Method"].astype(str).apply(parse_estimator)
 
-    # ---- filters ------------------------------------------------------------
     plot_df = plot_df[
-        plot_df['scenario'].isin(['Multiplicative', 'Linear']) &
-        plot_df['estimator'].isin(['DoubleML', 'EconML', 'OLS']) &
-        plot_df['DGP'].isin(['TreeFriendly', 'PLR', 'WGAN'])
+        plot_df["scenario"].isin(["Multiplicative", "Linear"])
+        & plot_df["estimator"].isin(["DoubleML", "EconML", "OLS"])
+        & plot_df["DGP"].isin(["TreeFriendly", "PLR", "WGAN"])
     ].copy()
 
-    plot_df = plot_df.sort_values(['scenario', 'DGP', 'Theta', 'estimator'])
+    plot_df = plot_df.sort_values(["scenario", "DGP", "Theta", "estimator"])
 
-    # ---- layout -------------------------------------------------------------
-    dgps = ['TreeFriendly', 'PLR', 'WGAN']
-    scenarios = ['Multiplicative', 'Linear']
+    dgps = ["TreeFriendly", "PLR", "WGAN"]
+    scenarios = ["Multiplicative", "Linear"]
 
     fig, axes = plt.subplots(
         nrows=len(scenarios),
         ncols=len(dgps),
         figsize=(14, 6),
         sharex=True,
-        sharey=True
+        sharey=True,
     )
 
-    fig.suptitle(
-        "Coverage Rates Comparison: TreeFriendly, PLR & WGAN (No Naive)",
-        fontsize=14
-    )
+    fig.suptitle("Coverage Rates Comparison: TreeFriendly, PLR & WGAN", fontsize=14)
 
     legend_handles, legend_labels = None, None
 
@@ -734,29 +427,24 @@ def plot_coverage_comparison(summary: pd.DataFrame, output_dir: Path):
         for j, dgp in enumerate(dgps):
             ax = axes[i, j]
 
-            sub = plot_df[
-                (plot_df['scenario'] == scen) &
-                (plot_df['DGP'] == dgp)
-            ]
-
+            sub = plot_df[(plot_df["scenario"] == scen) & (plot_df["DGP"] == dgp)]
             if sub.empty:
                 ax.set_axis_off()
                 continue
 
             sns.lineplot(
                 data=sub,
-                x='Theta',
-                y='Coverage',
-                hue='estimator',
-                marker='o',
+                x="Theta",
+                y="Coverage",
+                hue="estimator",
+                marker="o",
                 ax=ax,
-                errorbar=None
+                errorbar=None,
             )
 
-            # capture legend once
             if legend_handles is None:
                 handles, labels = ax.get_legend_handles_labels()
-                cleaned = [(h, l) for h, l in zip(handles, labels) if l != 'estimator']
+                cleaned = [(h, l) for h, l in zip(handles, labels) if l != "estimator"]
                 seen = set()
                 uniq = []
                 for h, l in cleaned:
@@ -766,9 +454,8 @@ def plot_coverage_comparison(summary: pd.DataFrame, output_dir: Path):
                 legend_handles = [h for h, _ in uniq]
                 legend_labels = [l for _, l in uniq]
 
-            # target lines
-            ax.axhline(0.95, color='red', linestyle='--', linewidth=1)
-            ax.axhline(0.90, color='gray', linestyle=':', linewidth=1)
+            ax.axhline(0.95, color="red", linestyle="--", linewidth=1)
+            ax.axhline(0.90, color="gray", linestyle=":", linewidth=1)
 
             ax.set_title(f"dgp = {dgp}", fontsize=10)
             ax.set_xlabel("theta" if i == len(scenarios) - 1 else "")
@@ -779,18 +466,16 @@ def plot_coverage_comparison(summary: pd.DataFrame, output_dir: Path):
             if ax.get_legend() is not None:
                 ax.get_legend().remove()
 
-        # row label (scenario)
         axes[i, 0].annotate(
             f"scenario = {scen}",
             xy=(-0.25, 0.5),
-            xycoords='axes fraction',
+            xycoords="axes fraction",
             rotation=90,
-            va='center',
-            ha='center',
-            fontsize=11
+            va="center",
+            ha="center",
+            fontsize=11,
         )
 
-    # ---- global legend ------------------------------------------------------
     if legend_handles:
         fig.legend(
             legend_handles,
@@ -798,15 +483,16 @@ def plot_coverage_comparison(summary: pd.DataFrame, output_dir: Path):
             title="estimator",
             loc="center left",
             bbox_to_anchor=(0.90, 0.5),
-            frameon=True
+            frameon=True,
         )
 
     plt.tight_layout(rect=[0, 0, 0.88, 0.95])
-    fname = "coverage_comparison_2x3_tree_plr_wgan.png"
+    fname = "coverage_comparison.png"
     plt.savefig(output_dir / fname, dpi=200)
     plt.close()
 
     print(f"Saved: {fname}")
+
 
 def plot_bias_variance_grid(df: pd.DataFrame, output_dir: Path):
     """
@@ -815,19 +501,13 @@ def plot_bias_variance_grid(df: pd.DataFrame, output_dir: Path):
       rows = scenario (Multiplicative, Linear)
       cols = DGP (TreeFriendly, PLR, WGAN)
 
-    - Excludes Naive (no theta dependence).
+    - Excludes Naive.
     - Separate figure per estimator (DoubleML, EconML, OLS).
-    - Uses tau_hat (raw draws) to compute Bias^2 and Variance by theta.
-    - Reference (OPTION 2):
+    - Uses tau_hat draws to compute Bias^2 and Variance by Theta.
+    - Reference:
         * PLR / TreeFriendly -> tau_ref = 1.0
         * WGAN -> tau_ref = 6250.951
     """
-
-    import numpy as np
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    from pathlib import Path
-
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -835,9 +515,10 @@ def plot_bias_variance_grid(df: pd.DataFrame, output_dir: Path):
     if not all(c in df.columns for c in required_cols):
         raise ValueError("DataFrame must contain DGP, Method, Theta, and tau_hat columns.")
 
+    print("Generating Plot: Bias-Variance Grid (2x3)...")
+
     plot_df = df.copy()
 
-    # --- parsers -------------------------------------------------------------
     def parse_scenario(method: str) -> str:
         if method.startswith("BadControl_"):
             return "Multiplicative"
@@ -860,34 +541,31 @@ def plot_bias_variance_grid(df: pd.DataFrame, output_dir: Path):
     plot_df["scenario"] = plot_df["Method"].astype(str).apply(parse_scenario)
     plot_df["estimator"] = plot_df["Method"].astype(str).apply(parse_estimator)
 
-    # keep only what we need
     plot_df = plot_df[plot_df["DGP"].isin(["TreeFriendly", "PLR", "WGAN"])].copy()
     plot_df = plot_df[plot_df["scenario"].isin(["Multiplicative", "Linear"])].copy()
     plot_df = plot_df[plot_df["estimator"].isin(["DoubleML", "EconML", "OLS"])].copy()
 
-    # ordering for the 2x3 grid
     dgps = ["TreeFriendly", "PLR", "WGAN"]
     scenarios = ["Multiplicative", "Linear"]
     estimators = ["DoubleML", "EconML", "OLS"]
 
-    # references (OPTION 2)
     TRUE_EFFECT_DEFAULT = 1.0
     TRUE_EFFECT_WGAN = 6250.951
 
     for est in estimators:
         df_est = plot_df[plot_df["estimator"] == est].copy()
         if df_est.empty:
-            print(f"Skipping estimator={est}: no data.")
+            print(f"Skipping Plot: No data for estimator={est}")
             continue
 
         fig, axes = plt.subplots(
             nrows=len(scenarios),
             ncols=len(dgps),
             figsize=(14, 6),
-            sharex=True
+            sharex=True,
         )
 
-        fig.suptitle(f"Bias-Variance Decomposition (Stacked): {est}", fontsize=16)
+        fig.suptitle(f"Bias-Variance Decomposition: {est}", fontsize=16)
 
         legend_handles, legend_labels = None, None
 
@@ -900,7 +578,6 @@ def plot_bias_variance_grid(df: pd.DataFrame, output_dir: Path):
                     ax.set_axis_off()
                     continue
 
-                # choose reference
                 tau_ref = TRUE_EFFECT_WGAN if dgp == "WGAN" else TRUE_EFFECT_DEFAULT
 
                 rows = []
@@ -919,38 +596,26 @@ def plot_bias_variance_grid(df: pd.DataFrame, output_dir: Path):
                     ax.set_axis_off()
                     continue
 
-                # stacked plot
-                polys = ax.stackplot(
+                ax.stackplot(
                     bv["Theta"],
                     bv["Bias^2"],
                     bv["Variance"],
                     labels=["Bias^2", "Variance"],
-                    alpha=0.8
+                    alpha=0.8,
                 )
 
-                # capture legend once (from first non-empty axis)
                 if legend_handles is None:
                     legend_handles, legend_labels = ax.get_legend_handles_labels()
 
-                # titles/labels
                 ax.set_title(f"dgp = {dgp} | scenario = {scen}", fontsize=11)
                 ax.grid(True, alpha=0.3)
 
-                if i == len(scenarios) - 1:
-                    ax.set_xlabel("theta")
-                else:
-                    ax.set_xlabel("")
+                ax.set_xlabel("theta" if i == len(scenarios) - 1 else "")
+                ax.set_ylabel("mse" if j == 0 else "")
 
-                if j == 0:
-                    ax.set_ylabel("mse")
-                else:
-                    ax.set_ylabel("")
-
-                # remove per-axis legend
                 if ax.get_legend() is not None:
                     ax.get_legend().remove()
 
-        # global legend on the right (no overlap)
         if legend_handles and legend_labels:
             fig.legend(
                 legend_handles,
@@ -958,59 +623,62 @@ def plot_bias_variance_grid(df: pd.DataFrame, output_dir: Path):
                 loc="center left",
                 bbox_to_anchor=(0.88, 0.5),
                 frameon=True,
-                title=""
+                title="",
             )
 
         plt.tight_layout(rect=[0, 0, 0.86, 0.93])
-        fname = f"bias_variance_grid_2x3_{est.lower()}.png"
+        fname = f"bias_variance_{est.lower()}.png"
         plt.savefig(output_dir / fname, dpi=200)
         plt.close()
 
         print(f"Saved: {fname}")
 
-
 def plot_tau_distribution_1x3_by_dgp(df: pd.DataFrame, output_dir: Path):
     """
-    3 figuras (una por DGP: TreeFriendly, PLR, WGAN).
-    Cada figura es 1x3 (DoubleML, EconML, OLS).
-    En cada panel: distribuciones por escenario (Naive, Multiplicative, Linear).
+    Creates 3 figures (one per DGP: TreeFriendly, PLR, WGAN).
+    Each figure is a 1x3 grid (DoubleML, EconML, OLS).
+    Within each panel: estimate distributions by scenario (Naive, Multiplicative, Linear).
 
-    - Para colliders: SOLO Theta = 1.0 (se eliminan theta=0).
-    - Línea vertical:
+    - For colliders: uses ONLY Theta = 1.0 (drops Theta=0).
+    - Reference vertical line:
         * PLR / TreeFriendly -> tau = 1.0
-        * WGAN -> referencia = 6250.951
-    - Leyenda única fuera (a la derecha), sin invadir paneles.
-    - Robustez: si KDE es inestable (pocos valores únicos / varianza ~0), usa histplot (density).
-    - Fix especial: WGAN + OLS usa doble eje Y (Naive en eje izq, Colliders en eje der)
-      para evitar que se aplaste por escalas muy distintas.
+        * WGAN -> reference = 6250.951
+    - Single global legend outside (right side), close to the figure.
+    - For PLR and TreeFriendly: fixed axis scale:
+        xlim = (0.4, 1.2), ylim = (0, 18)
+    - For WGAN + OLS: uses a dual y-axis (Naive left, Colliders right)
+      to avoid flattening densities.
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    from pathlib import Path
-    from typing import Optional, Tuple
+    from matplotlib.lines import Line2D
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     required_cols = ["DGP", "Method", "Theta", "tau_hat"]
     if not all(c in df.columns for c in required_cols):
-        raise ValueError("DataFrame must contain DGP, Method, Theta, and tau_hat columns.")
+        raise ValueError(
+            "DataFrame must contain DGP, Method, Theta, and tau_hat columns."
+        )
+
+    print("Generating Plot: Tau Distribution (1x3 by DGP)...")
 
     df = df.copy()
 
-    estimators = ["DoubleML", "EconML", "OLS"]
+    estimators = ["OLS", "DoubleML", "EconML"]
+
     dgps = ["TreeFriendly", "PLR", "WGAN"]
     scenario_order = ["Naive", "Multiplicative", "Linear"]
 
     palette = {
-        "Naive": "#1f77b4",
+        "Naive": "#1F4E79",
         "Multiplicative": "#ff7f0e",
-        "Linear": "#2ca02c",
+        "Linear": "#4C956C",
     }
 
-    # ---- parsers ------------------------------------------------------------
-    def parse_scenario(method: str) -> Optional[str]:
+    # ------------------------------------------------------------------ #
+    # Helpers
+    # ------------------------------------------------------------------ #
+    def parse_scenario(method: str):
         if method.startswith("Naive_"):
             return "Naive"
         if method.startswith("BadControl_"):
@@ -1020,26 +688,26 @@ def plot_tau_distribution_1x3_by_dgp(df: pd.DataFrame, output_dir: Path):
         return None
 
     def has_estimator(method: str, est: str) -> bool:
-        # compatible con Method tipo: BadControl_DoubleML, Naive_EconML, LinearCollider_OLS, etc.
-        return method.endswith(f"_{est}") or f"_{est}" in method
+        m = str(method)
+        return m.endswith(f"_{est}") or f"_{est}" in m
 
-    # ---- helpers ------------------------------------------------------------
-    def stable_xlim(values: np.ndarray, ref: float) -> Optional[Tuple[float, float]]:
-        """Rango por panel usando cuantiles para evitar que se aplaste la KDE."""
-        v = np.asarray(values)
-        v = v[np.isfinite(v)]
-        if v.size < 5:
+    def stable_xlim(values: np.ndarray, ref: float | None):
+        values = np.asarray(values)
+        values = values[np.isfinite(values)]
+        if values.size < 5:
             return None
 
-        q01, q99 = np.quantile(v, [0.01, 0.99])
+        q01, q99 = np.quantile(values, [0.01, 0.99])
         if q01 == q99:
-            q01, q99 = v.min(), v.max()
+            q01, q99 = values.min(), values.max()
 
         span = max(1e-9, q99 - q01)
         pad = 0.10 * span
+        lo, hi = q01 - pad, q99 + pad
 
-        lo = min(q01 - pad, ref - pad)
-        hi = max(q99 + pad, ref + pad)
+        if ref is not None:
+            lo = min(lo, ref - pad)
+            hi = max(hi, ref + pad)
 
         if lo == hi:
             lo -= 1.0
@@ -1047,16 +715,15 @@ def plot_tau_distribution_1x3_by_dgp(df: pd.DataFrame, output_dir: Path):
 
         return float(lo), float(hi)
 
-    def plot_density(ax, x, label, color):
-        """KDE si es estable; si no, hist density."""
+    def plot_density(ax, x, color):
         x = np.asarray(x)
         x = x[np.isfinite(x)]
         if x.size < 5:
-            return None
+            return
 
-        # Heurística de estabilidad
+        # KDE can fail on degenerate distributions -> fallback to histogram
         if np.std(x) < 1e-9 or np.unique(x).size < 5:
-            artist = sns.histplot(
+            sns.histplot(
                 x=x,
                 bins=min(30, max(5, int(np.sqrt(x.size)))),
                 stat="density",
@@ -1065,176 +732,130 @@ def plot_tau_distribution_1x3_by_dgp(df: pd.DataFrame, output_dir: Path):
                 alpha=0.20,
                 color=color,
                 ax=ax,
-                label=label,
             )
-            return artist
+            return
 
-        artist = sns.kdeplot(
+        sns.kdeplot(
             x=x,
             fill=True,
             alpha=0.25,
             linewidth=1.5,
             color=color,
             ax=ax,
-            label=label,
             bw_adjust=1.1,
         )
-        return artist
 
-    # ---- scenario column + filter thetas -----------------------------------
-    df["scenario"] = df["Method"].apply(parse_scenario)
+    # ------------------------------------------------------------------ #
+    # Prepare data
+    # ------------------------------------------------------------------ #
+    df["scenario"] = df["Method"].astype(str).apply(parse_scenario)
     df = df[df["scenario"].notnull()].copy()
 
-    # eliminar theta=0 para colliders; mantener Naive (normalmente theta=0)
+    # Keep Naive at any theta; colliders only at theta=1.0
     df = df[(df["scenario"] == "Naive") | (df["Theta"] == 1.0)].copy()
 
-    # ---- main loop ----------------------------------------------------------
+    # ------------------------------------------------------------------ #
+    # Main loop by DGP
+    # ------------------------------------------------------------------ #
     for dgp in dgps:
         sub_dgp = df[df["DGP"] == dgp].copy()
         if sub_dgp.empty:
-            print(f"Skipping {dgp}: no data.")
+            print(f"Skipping Plot: No data for DGP={dgp}")
             continue
 
         ref = 6250.951 if dgp == "WGAN" else 1.0
-        ref_label = "WGAN reference" if dgp == "WGAN" else "True τ = 1.0"
+        ref_label = "WGAN Reference" if dgp == "WGAN" else "True Effect (1.0)"
 
         fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(16, 5), sharey=False)
-        fig.suptitle(f"{dgp}: Distribution of Estimates (Theta=1 for colliders)", fontsize=18)
+        fig.suptitle(
+            f"{dgp}: Distribution of Estimates",
+            fontsize=18,
+        )
 
-        # Vamos a construir una leyenda global manualmente
-        legend_handles = []
-        legend_labels = []
-
-        # Guardamos una vez los handles de escenarios (patches/lines)
-        scenario_handle_map = {}
-        ref_handle = None
+        # Define filename EARLY (important!)
+        fname = f"Distribution_of_Estimates_{dgp.lower()}.png"
 
         for j, est in enumerate(estimators):
             ax = axes[j]
 
-            sub_est = sub_dgp[sub_dgp["Method"].apply(lambda m: has_estimator(m, est))].copy()
+            sub_est = sub_dgp[
+                sub_dgp["Method"].apply(lambda m: has_estimator(m, est))
+            ].copy()
             if sub_est.empty:
                 ax.set_axis_off()
                 continue
 
-            # datos por escenario
-            data_by_scen = {}
-            pooled = []
+            # Special case: WGAN + OLS -> dual y-axis
+            if dgp == "WGAN" and est == "OLS":
+                ax_left = ax
+                ax_right = ax_left.twinx()
 
+                x_naive = sub_est[sub_est["scenario"] == "Naive"]["tau_hat"].values
+                plot_density(ax_left, x_naive, palette["Naive"])
+
+                for scen in ["Multiplicative", "Linear"]:
+                    x_s = sub_est[sub_est["scenario"] == scen]["tau_hat"].values
+                    plot_density(ax_right, x_s, palette[scen])
+
+                pooled = sub_est["tau_hat"].values
+                xlim = stable_xlim(pooled, ref=ref)
+                if xlim is not None:
+                    ax_left.set_xlim(*xlim)
+
+                ax_left.axvline(ref, color="black", linestyle="--", linewidth=1.8)
+
+                ax_left.set_ylabel("Density (Naive)")
+                ax_right.set_ylabel("Density (Colliders)")
+                ax_left.set_xlabel("tau_hat")
+                ax_left.set_title("OLS", fontsize=14)
+                ax_left.grid(True, alpha=0.30)
+                continue
+
+            # Normal case
+            pooled = []
             for scen in scenario_order:
-                vals = sub_est[sub_est["scenario"] == scen]["tau_hat"].dropna().values
-                if vals.size > 0:
-                    data_by_scen[scen] = vals
-                    pooled.append(vals)
+                x_s = sub_est[sub_est["scenario"] == scen]["tau_hat"].values
+                if x_s.size > 0:
+                    pooled.append(x_s)
+                    plot_density(ax, x_s, palette[scen])
 
             pooled_vals = np.concatenate(pooled) if pooled else np.array([])
-
-            # xlim robusto por panel
             xlim = stable_xlim(pooled_vals, ref=ref)
             if xlim is not None:
                 ax.set_xlim(*xlim)
 
+            ax.axvline(ref, color="black", linestyle="--", linewidth=1.8)
+
             ax.set_title(est, fontsize=14)
             ax.set_xlabel("tau_hat")
-            if j == 0:
-                ax.set_ylabel("Density")
-            else:
-                ax.set_ylabel("")
             ax.grid(True, alpha=0.30)
+            ax.set_ylabel("Density" if j == 0 else "")
 
-            # ---- Caso especial: WGAN + OLS -> dual y-axis --------------------
-            if dgp == "WGAN" and est == "OLS":
-                ax2 = ax.twinx()  # eje derecho para colliders
+            # Fixed scale for simulated DGPs
+            if dgp in ["PLR", "TreeFriendly"]:
+                ax.set_xlim(0.4, 1.2)
+                ax.set_ylim(0.0, 18.0)
 
-                # Naive en eje izquierdo
-                if "Naive" in data_by_scen:
-                    plot_density(ax, data_by_scen["Naive"], "Naive", palette["Naive"])
+        # ------------------------------------------------------------------ #
+        # Global legend (manual, robust)
+        # ------------------------------------------------------------------ #
+        legend_elements = [
+            Line2D([0], [0], color=palette["Naive"], lw=2, label="Naive"),
+            Line2D([0], [0], color=palette["Multiplicative"], lw=2, label="Multiplicative"),
+            Line2D([0], [0], color=palette["Linear"], lw=2, label="Linear"),
+            Line2D([0], [0], color="black", lw=2, linestyle="--", label=ref_label),
+        ]
 
-                # Colliders en eje derecho
-                for scen in ["Multiplicative", "Linear"]:
-                    if scen in data_by_scen:
-                        plot_density(ax2, data_by_scen[scen], scen, palette[scen])
-
-                # Ajustar xlim también para el twin (mismo)
-                if xlim is not None:
-                    ax2.set_xlim(*xlim)
-
-                # Línea de referencia (la dibujamos en el eje izquierdo para que se vea consistente)
-                ref_line = ax.axvline(ref, color="black", linestyle="--", linewidth=1.8)
-
-                # Guardar handles para leyenda global (solo una vez)
-                if not scenario_handle_map:
-                    # Tomamos handles de ambos ejes
-                    h1, l1 = ax.get_legend_handles_labels()
-                    h2, l2 = ax2.get_legend_handles_labels()
-                    for h, l in zip(h1 + h2, l1 + l2):
-                        if l not in scenario_handle_map:
-                            scenario_handle_map[l] = h
-
-                if ref_handle is None:
-                    ref_handle = ref_line
-
-                # Quitar leyendas internas
-                if ax.get_legend() is not None:
-                    ax.get_legend().remove()
-                if ax2.get_legend() is not None:
-                    ax2.get_legend().remove()
-
-                # Etiquetas de ejes Y para que sea claro (opcional)
-                ax.set_ylabel("Density (Naive)")
-                ax2.set_ylabel("Density (Colliders)")
-
-            # ---- Caso normal (un solo eje) -----------------------------------
-            else:
-                for scen in scenario_order:
-                    if scen in data_by_scen:
-                        plot_density(ax, data_by_scen[scen], scen, palette[scen])
-
-                ref_line = ax.axvline(ref, color="black", linestyle="--", linewidth=1.8)
-
-                # Guardar handles para leyenda global (solo una vez)
-                if not scenario_handle_map:
-                    h, l = ax.get_legend_handles_labels()
-                    for hh, ll in zip(h, l):
-                        if ll not in scenario_handle_map:
-                            scenario_handle_map[ll] = hh
-
-                if ref_handle is None:
-                    ref_handle = ref_line
-
-                if ax.get_legend() is not None:
-                    ax.get_legend().remove()
-
-        # ---- construir leyenda global (Scenario + ref) -----------------------
-        # Orden fijo
-        for scen in scenario_order:
-            if scen in scenario_handle_map:
-                legend_handles.append(scenario_handle_map[scen])
-                legend_labels.append(scen)
-
-        if ref_handle is not None:
-            legend_handles.append(ref_handle)
-            legend_labels.append(ref_label)
-
-        if legend_handles:
-            fig.legend(
-                legend_handles,
-                legend_labels,
-                title="Scenario",
-                loc="center left",
-                bbox_to_anchor=(0.92, 0.5),  # ← más cerca
-                frameon=True,
-            )
-
-        fig.subplots_adjust(
-            left=0.06,
-            right=0.88,   # ← más espacio para los paneles
-            bottom=0.14,
-            top=0.82,
-            wspace=0.25,
+        fig.legend(
+            handles=legend_elements,
+            title="Scenario",
+            loc="center left",
+            bbox_to_anchor=(0.85, 0.5),
+            frameon=True,
         )
 
-        fname = f"tau_distribution_1x3_{dgp.lower()}.png"
+        plt.tight_layout(rect=[0, 0, 0.86, 0.92])
         plt.savefig(output_dir / fname, dpi=200, bbox_inches="tight")
         plt.close()
 
+        print(f"Saved: {fname}")
