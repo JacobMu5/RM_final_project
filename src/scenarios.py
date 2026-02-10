@@ -112,11 +112,11 @@ def get_microscope_scenario(
 
     if dgp == "TreeFriendly":
         dgp_class = TreeFriendlyDGP
-        dgp_params = {"n_features": 4, "include_collider": True, "theta": theta}
+        dgp_params = {"n_features": 11, "include_collider": True, "theta": theta}
 
     elif dgp == "PLR":
         dgp_class = PLRCCDDHNR2018DGP
-        dgp_params = {"n_features": 4, "tau": 1.0, "include_collider": True, "theta": theta}
+        dgp_params = {"n_features": 11, "tau": 1.0, "include_collider": True, "theta": theta}
 
     elif dgp == "WGAN":
         dgp_class = WGANDGP
