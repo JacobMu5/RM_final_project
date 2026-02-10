@@ -1,41 +1,36 @@
-# Research Methods Final Project: Collider Bias & Causal Forests
+# Causal Inference Project
 
-This repository contains the simulation code for our final project investigating spurious heterogeneity.
+This project simulates how well different methods (DoubleML, EconML, OLS) estimate treatment effects. It uses three different ways to generate data: TreeFriendly, PLR, and WGAN.
 
-### Research Question
-*"How does the functional form of a collider (Linear, Multiplicative, or Threshold) dictate the structure of spurious heterogeneity, and to what extent does this compromise **estimation accuracy (Bias, MSE)** and **inference validity (Coverage Probability)** in non-parametric Causal Forests versus semi-parametric Double Machine Learning?"*
+## Setup
 
-> **Project Scope & Metrics:**
-> * **Bias Structure:** We analyze the distinct "shapes" of bias introduced by different collider functions.
-> * **Inference Failure:** We specifically test for **Coverage Collapse**—instances where standard confidence intervals fail to cover the true effect.
-> * **Method Comparison:** We contrast the robustness of **Causal Forests** (which may "learn" the noise) against **DML Partial Linear Regression** (which assumes linearity).
-> * **Note:** Ordinary Least Squares (OLS) will serve as a baseline in future iterations.
----
+To run the code, you need Python **3.11.9**.
 
-### How to Run
+1.  Clone this folder.
 
-1.  **Install Dependencies**
+2.  Install the required packages:
     ```bash
     pip install -r requirements.txt
     ```
 
-2.  **Clean Old Results**
-    **Important:** Before running a new simulation, delete any existing files in the `results/` folder (including the `plots/` subdirectory) to ensure a clean run.
+## Reproducibility
 
-3.  **Run Simulations**
-    This script runs the scenarios and saves the raw data to `results/final_results.csv`.
-    ```bash
-    python main.py
-    ```
-    > **Warning:** This simulation takes **over an hour** to complete depending on your hardware. Please allow it to finish uninterrupted.
+The project is set up to give the exact same results every time.
+-   **Random Seeds**: All random numbers are controlled by a fixed seed.
+-   **WGAN**: The WGAN model uses saved weights so it always generates the same data.
 
-4.  **Generate Plots & Tables**
-    This script reads the new results and creates the "Microscope View" and other plots in `results/plots/`.
-    ```bash
-    python analysis.py
-    ```
+## Running the Code
 
-### Project Structure
-* `main.py`: Entry point for running simulations.
-* `analysis.py`: Generates tables and figures from the simulation data.
-* `src/`: Contains the DGPs (`tree_friendly.py`), Estimators (`econml.py`, `dml.py`), and orchestration logic.
+### 1. Run Simulations
+To run all simulations and save the results:
+```bash
+python main.py
+```
+This will create `results/final_results.csv`.
+
+### 2. Generate Plots
+To analyze the results and create plots:
+```bash
+python analysis.py
+```
+The plots will be saved in the `results/plots` folder.
