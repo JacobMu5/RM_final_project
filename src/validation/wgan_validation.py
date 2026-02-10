@@ -184,3 +184,20 @@ def generate_wgan_validation_plots(wgan_dgp, output_dir: Path):
     print("\nGenerated details:")
     print("  - Results saved to:", output_dir)
 
+
+
+if __name__ == "__main__":
+    import sys
+    project_root = Path(__file__).resolve().parent.parent.parent
+    sys.path.append(str(project_root))
+
+    from src.dgps.wgan import WGANDGP
+
+    print("Running WGAN Validation...")
+
+    wgan = WGANDGP()
+    output_dir = Path("results/plots")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    generate_wgan_validation_plots(wgan, output_dir)
+
