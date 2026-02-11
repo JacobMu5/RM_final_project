@@ -188,6 +188,8 @@ def generate_wgan_validation_plots(wgan_dgp, output_dir: Path):
 
 if __name__ == "__main__":
     import sys
+    from pathlib import Path
+
     project_root = Path(__file__).resolve().parent.parent.parent
     sys.path.append(str(project_root))
 
@@ -195,9 +197,8 @@ if __name__ == "__main__":
 
     print("Running WGAN Validation...")
 
-    wgan = WGANDGP()
-    output_dir = Path("results/wgan_validation")
+    output_dir = project_root / "results" / "plots" / "wgan_validation"
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    generate_wgan_validation_plots(wgan, output_dir)
 
+    wgan = WGANDGP()
+    generate_wgan_validation_plots(wgan, output_dir)
