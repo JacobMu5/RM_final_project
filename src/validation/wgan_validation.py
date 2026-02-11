@@ -196,7 +196,7 @@ if __name__ == "__main__":
     print("Running WGAN Validation...")
 
     wgan = WGANDGP()
-    output_dir = Path("results/plots")
+    output_dir = Path("results/wgan_validation")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     generate_wgan_validation_plots(wgan, output_dir)
