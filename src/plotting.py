@@ -727,23 +727,23 @@ def plot_tau_distribution_1x3_by_dgp(df: pd.DataFrame, output_dir: Path):
                 ax_left = ax
                 ax_right = ax_left.twinx()
 
-                x_naive = sub_est[sub_est["scenario"] == "Naive"]["tau_hat"].values
-                plot_density(ax_left, x_naive, palette["Naive"])
-
-                for scen in ["Multiplicative", "Linear"]:
+                for scen in ["Naive", "Multiplicative"]:
                     x_s = sub_est[sub_est["scenario"] == scen]["tau_hat"].values
-                    plot_density(ax_right, x_s, palette[scen])
+                    plot_density(ax_left, x_s, palette[scen])
+
+                x_lin = sub_est[sub_est["scenario"] == "Linear"]["tau_hat"].values
+                plot_density(ax_right, x_lin, palette["Linear"])
 
                 if xlim_global is not None:
                     ax_left.set_xlim(*xlim_global)
                     ax_right.set_xlim(*xlim_global)
 
                 ax_left.axvline(ref, color="black", linestyle="--", linewidth=1.8)
-                ax_left.set_ylabel("Density (Naive)")
-                ax_right.set_ylabel("Density (Colliders)")
+                ax_left.set_ylabel("Density (Naive & Mult.)")
+                ax_right.set_ylabel("Density (Linear)")
                 ax_left.set_title("OLS")
                 ax_left.grid(True, alpha=0.3)
-
+                
                 main_axes.append(ax_left)
                 continue
 
