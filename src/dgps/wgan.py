@@ -34,14 +34,14 @@ class WGANDGP:
         self.print_every = print_every
         self.wgan_epochs = wgan_epochs
         
-        self.base_path = Path("trained_models")
+        self.base_path = Path(__file__).parent.parent / "validation" / "trained_models"
         self.base_path.mkdir(parents=True, exist_ok=True)
         self.path_gx = self.base_path / "wgan_gx.pth"
         self.path_gy = self.base_path / "wgan_gy.pth"
         self.path_ate = self.base_path / "wgan_ate.txt"
         self.device = torch.device('cpu')
         
-        data_path = Path("data/401k.pkl")
+        data_path = Path(__file__).parent.parent / "validation" / "data" / "401k.pkl"
         if data_path.exists():
             try:
                 data = pd.read_pickle(data_path)
