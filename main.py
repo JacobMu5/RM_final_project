@@ -10,7 +10,7 @@ def main():
     
     results_path = results_dir / "final_results.csv"
     
-    n_sim = 100
+    n_sim = 1000
     
     print(f"Preparing scenarios (N={n_sim})...")
 
