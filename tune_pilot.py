@@ -7,6 +7,7 @@ on the nuisance loss (MSE), without access to true treatment effects.
 import numpy as np
 from src.dgps.tree_friendly import TreeFriendlyDGP
 from src.dgps.plr_ccddhnr2018 import PLRCCDDHNR2018DGP
+from src.dgps.wgan import WGANDGP
 from src.estimators.dml import DoubleMLEstimator
 
 
@@ -69,6 +70,23 @@ def run_pilot_tuning():
         print("ml_m:", best_params_plr['ml_m']['D'][0][0])
     except Exception as e:
         print(f"Tuning failed for PLR: {e}")
+
+    print("\n--- Tuning for WGAN DGP ---")
+    dgp_wgan = WGANDGP(theta=0.0)
+    d, y, w = dgp_wgan.sample(n_obs=2000, seed=42)
+
+    try:
+        best_params_wgan = est.tune(
+            d, y, w,
+            param_space=ml_param_space,
+            n_trials=20,
+            show_progress=False
+        )
+        print("Best Params (WGAN):")
+        print("ml_l:", best_params_wgan['ml_l']['D'][0][0])
+        print("ml_m:", best_params_wgan['ml_m']['D'][0][0])
+    except Exception as e:
+        print(f"Tuning failed for WGAN: {e}")
 
 
 if __name__ == "__main__":

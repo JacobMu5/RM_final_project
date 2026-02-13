@@ -60,11 +60,7 @@ def run_raw_simulation(config, seed):
 
     dgp_init_params = inspect.signature(config.dgp_class.__init__).parameters
 
-    if 'confounding_strength' in dgp_init_params:
-        dgp_kwargs['confounding_strength'] = 0.2
 
-    if 'noise_std' in dgp_init_params:
-        dgp_kwargs['noise_std'] = 1.0
 
     dgp = config.dgp_class(**dgp_kwargs)
 

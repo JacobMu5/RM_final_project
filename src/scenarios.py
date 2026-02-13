@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Type
 import numpy as np
 from src.dgps.tree_friendly import TreeFriendlyDGP
+from src.dgps.wgan import WGANDGP
 from src.dgps.plr_ccddhnr2018 import PLRCCDDHNR2018DGP
 from src.estimators.dml import DoubleMLEstimator
 from src.estimators.econml import EconMLEstimator
@@ -61,14 +62,16 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
     scenarios = []
 
     RF_PARAMS = {
-        'TreeFriendly': {'n_jobs': -1, 'n_estimators': 500, 'max_features': 0.3, 'min_samples_leaf': 6, 'min_samples_split': 5, 'max_depth': 5},
-        'PLR': {'n_jobs': -1, 'n_estimators': 400, 'max_features': 0.8, 'min_samples_leaf': 15, 'min_samples_split': 7, 'max_depth': None}
+        'TreeFriendly': {'n_jobs': 1, 'n_estimators': 500, 'max_features': 0.3, 'min_samples_leaf': 6, 'min_samples_split': 5, 'max_depth': 5},
+        'WGAN': {'n_jobs': 1, 'n_estimators': 400, 'max_features': 'sqrt', 'min_samples_leaf': 17, 'min_samples_split': 14, 'max_depth': 50},
+        'PLR': {'n_jobs': 1, 'n_estimators': 400, 'max_features': 0.8, 'min_samples_leaf': 15, 'min_samples_split': 7, 'max_depth': None}
     }
 
     DGP_CONFIGS = [
-        ('TreeFriendly', TreeFriendlyDGP, {'n_features': 12, 'alpha_u': 0.0, 'gamma_u': 0.0}, 
+        ('TreeFriendly', TreeFriendlyDGP, {'n_features': 11, 'alpha_u': 0.0, 'gamma_u': 0.0}, 
          {'n_folds': 5, 'n_trees': 400, 'n_rep': 1}, {'n_estimators': 400}),
-        ('PLR', PLRCCDDHNR2018DGP, {'n_features': 12, 'tau': 1.0},
+        ('WGAN', WGANDGP, {}, {'n_folds': 5, 'n_trees': 400, 'n_rep': 1}, {'n_estimators': 400}),
+        ('PLR', PLRCCDDHNR2018DGP, {'n_features': 11, 'tau': 1.0},
          {'n_folds': 5, 'n_trees': 500, 'n_rep': 1}, {'n_estimators': 300})
     ]
 
@@ -99,15 +102,45 @@ def get_scenarios(n_sim: int = 100) -> List[ScenarioConfig]:
     return scenarios
 
 
-def get_microscope_scenario(theta: float = 1.0, seed: int = 42) -> ScenarioConfig:
+def get_microscope_scenario(
+    theta: float = 1.0,
+    seed: int = 42,
+    dgp: str = "TreeFriendly"
+) -> ScenarioConfig:
     """Returns a specific configuration for the 'Microscope View' diagnostic."""
+    dgp = str(dgp)
+
+    if dgp == "TreeFriendly":
+        dgp_class = TreeFriendlyDGP
+        dgp_params = {"n_features": 11, "include_collider": True, "theta": theta}
+
+    elif dgp == "PLR":
+        dgp_class = PLRCCDDHNR2018DGP
+        dgp_params = {"n_features": 11, "tau": 1.0, "include_collider": True, "theta": theta}
+
+    elif dgp == "WGAN":
+        dgp_class = WGANDGP
+        dgp_params = {"include_collider": True, "theta": theta}
+
+    else:
+        raise ValueError(f"Unknown dgp='{dgp}'. Use one of: TreeFriendly, PLR, WGAN")
+
     return ScenarioConfig(
-        name="Microscope_Diagnostic",
-        dgp_class=TreeFriendlyDGP,
-        dgp_params={'n_features': 4, 'include_collider': True, 'theta': theta},
+        name=f"Microscope_Diagnostic_{dgp}",
+        dgp_class=dgp_class,
+        dgp_params=dgp_params,
         estimator_class=ReproducibleEconMLEstimator,
-        estimator_params={'n_estimators': 200, 'random_state': seed, 'rf_params': {'n_estimators': 200, 'min_samples_leaf': 1, 'max_features': 0.9, 'n_jobs': -1}},
+        estimator_params={
+            "n_estimators": 200,
+            "random_state": seed,
+            "rf_params": {
+                "n_estimators": 200,
+                "min_samples_leaf": 1,
+                "max_features": 0.9,
+                "n_jobs": -1,
+            },
+        },
         sample_size=2000,
         n_simulations=1,
-        first_seed=seed
+        first_seed=seed,
     )

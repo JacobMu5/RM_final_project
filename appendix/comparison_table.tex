@@ -1,0 +1,45 @@
+\begin{table}[h]
+\centering
+\caption{Comprehensive Estimator Performance Comparison with Relative Bias}
+\label{tab:benchmark_comparison_detailed}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llccccccc}
+\toprule
+\textbf{DGP} & \textbf{Est.} & \textbf{Scenario} & \textbf{True ATE} & \textbf{Est. ATE} & \textbf{Bias} & \textbf{Rel. Bias} & \textbf{CI Width} & \textbf{Cov.} \\
+\midrule
+\multicolumn{9}{l}{\textit{Panel A: Baseline (Naive, Theta=0)}} \\
+TreeFriendly & OLS & Naive & 1.0 & 1.00 & 0.00 & 0.00 & 0.09 & 0.94 \\
+TreeFriendly & DoubleML & Naive & 1.0 & 1.00 & 0.00 & 0.00 & 0.09 & 0.94 \\
+TreeFriendly & EconML & Naive & 1.0 & 1.00 & 0.00 & 0.00 & 0.30 & 1.00 \\
+PLR & OLS & Naive & 1.0 & 1.00 & -0.00 & -0.00 & 0.09 & 0.96 \\
+PLR & DoubleML & Naive & 1.0 & 1.00 & -0.00 & -0.00 & 0.09 & 0.95 \\
+PLR & EconML & Naive & 1.0 & 1.00 & -0.00 & -0.00 & 0.32 & 1.00 \\
+\textbf{WGAN} & \textbf{OLS} & \textbf{Naive} & \textbf{6,250} & \textbf{7,170.29} & \textbf{919.34} & \textbf{0.15} & \textbf{2,734.30} & \textbf{0.75} \\
+\textbf{WGAN} & \textbf{DoubleML} & \textbf{Naive} & \textbf{6,250} & \textbf{7,231.32} & \textbf{980.37} & \textbf{0.16} & \textbf{5,245.59} & \textbf{0.87} \\
+\textbf{WGAN} & \textbf{EconML} & \textbf{Naive} & \textbf{6,250} & \textbf{6,496.72} & \textbf{245.77} & \textbf{0.04} & \textbf{24,269.82} & \textbf{1.00} \\
+\midrule
+\multicolumn{9}{l}{\textit{Panel B: Linear Collider}} \\
+TreeFriendly & OLS & LinearCollider & 1.0 & 0.78 & -0.22 & -0.22 & 0.11 & 0.00 \\
+TreeFriendly & DoubleML & LinearCollider & 1.0 & 0.84 & -0.16 & -0.16 & 0.10 & 0.00 \\
+TreeFriendly & EconML & LinearCollider & 1.0 & 0.83 & -0.17 & -0.17 & 0.35 & 0.51 \\
+PLR & OLS & LinearCollider & 1.0 & 0.78 & -0.22 & -0.22 & 0.11 & 0.00 \\
+PLR & DoubleML & LinearCollider & 1.0 & 0.78 & -0.22 & -0.22 & 0.11 & 0.00 \\
+PLR & EconML & LinearCollider & 1.0 & 0.79 & -0.21 & -0.21 & 0.39 & 0.26 \\
+\textbf{WGAN} & \textbf{OLS} & \textbf{LinearCollider} & \textbf{6,250} & \textbf{-1.68} & \textbf{-6,252.63} & \textbf{-1.00} & \textbf{0.68} & \textbf{0.00} \\
+\textbf{WGAN} & \textbf{DoubleML} & \textbf{LinearCollider} & \textbf{6,250} & \textbf{3,479.70} & \textbf{-2,771.26} & \textbf{-0.44} & \textbf{4,672.48} & \textbf{0.34} \\
+\textbf{WGAN} & \textbf{EconML} & \textbf{LinearCollider} & \textbf{6,250} & \textbf{2,775.22} & \textbf{-3,475.73} & \textbf{-0.56} & \textbf{22,878.29} & \textbf{1.00} \\
+\midrule
+\multicolumn{9}{l}{\textit{Panel C: Multiplicative Collider}} \\
+TreeFriendly & OLS & Multiplicative & 1.0 & 1.00 & 0.00 & 0.00 & 0.09 & 0.94 \\
+TreeFriendly & DoubleML & Multiplicative & 1.0 & 1.00 & 0.00 & 0.00 & 0.09 & 0.93 \\
+TreeFriendly & EconML & Multiplicative & 1.0 & 0.76 & -0.24 & -0.24 & 0.39 & 0.05 \\
+PLR & OLS & Multiplicative & 1.0 & 0.99 & -0.01 & -0.01 & 0.09 & 0.95 \\
+PLR & DoubleML & Multiplicative & 1.0 & 0.75 & -0.25 & -0.25 & 0.14 & 0.00 \\
+PLR & EconML & Multiplicative & 1.0 & 0.61 & -0.39 & -0.39 & 0.65 & 0.05 \\
+\textbf{WGAN} & \textbf{OLS} & \textbf{Multiplicative} & \textbf{6,250} & \textbf{1,267.35} & \textbf{-4,983.61} & \textbf{-0.80} & \textbf{2,729.77} & \textbf{0.00} \\
+\textbf{WGAN} & \textbf{DoubleML} & \textbf{Multiplicative} & \textbf{6,250} & \textbf{398.74} & \textbf{-5,852.21} & \textbf{-0.94} & \textbf{9,412.88} & \textbf{0.26} \\
+\textbf{WGAN} & \textbf{EconML} & \textbf{Multiplicative} & \textbf{6,250} & \textbf{2,734.26} & \textbf{-3,516.69} & \textbf{-0.56} & \textbf{71,625.52} & \textbf{1.00} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
